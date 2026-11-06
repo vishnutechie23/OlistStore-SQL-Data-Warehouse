@@ -1,1 +1,813 @@
+================================================================================
+OLIST E-COMMERCE SQL DATA WAREHOUSE PROJECT BLUEPRINT & DOCUMENTATION
+================================================================================
 
+Project type : End-to-end SQL Data Warehouse / Business Intelligence
+Dataset : Brazilian E-Commerce Public Dataset by Olist Database :
+Microsoft SQL Server (recommended project implementation) BI tool :
+Microsoft Power BI Architecture : Medallion Architecture (Bronze ->
+Silver -> Gold) Status : Planning and design document (not yet
+implemented) Version : 1.0 Prepared : 06 November 2026
+
+  ------------------
+  DOCUMENT PURPOSE
+  ------------------
+
+This document defines the project scope, source dataset, data model,
+warehouse architecture, transformation strategy, validation approach,
+SQL implementation plan, Power BI reporting plan, repository structure,
+and project deliverables.
+
+It is a blueprint for implementation. It does not claim that the
+warehouse, SQL scripts, data quality checks, or Power BI report have
+already been built. Actual source row counts, data-quality findings, and
+business results must be measured from the downloaded CSV files during
+the profiling phase.
+
+================================================================================ 1.
+PROJECT OVERVIEW
+================================================================================
+
+1.1 Business context
+
+Olist is an e-commerce marketplace platform in Brazil. The public
+dataset contains anonymized historical marketplace order data, together
+with related information about customers, products, sellers, payments,
+reviews, delivery timestamps, and geographic locations.
+
+The project will simulate a small analytical data platform for an
+e-commerce business. Data will be ingested from CSV files, retained in a
+raw Bronze layer, cleaned and integrated in a Silver layer, and shaped
+into business-friendly fact and dimension tables in a Gold layer. Power
+BI will consume the Gold layer to present business performance.
+
+1.2 Main objective
+
+Build an end-to-end SQL Server data warehouse that demonstrates the
+ability to:
+
+-   Understand a multi-table relational source dataset.
+-   Design schemas and raw landing tables.
+-   Load and preserve source data.
+-   Clean, standardize, validate, and integrate data using SQL.
+-   Design a dimensional model using facts and dimensions.
+-   Create reusable SQL views and stored procedures.
+-   Test data quality and reconcile totals across layers.
+-   Connect Power BI to curated Gold data.
+-   Explain the complete data flow and business meaning of the metrics.
+
+1.3 Intended audience
+
+The warehouse is designed for business analysts, sales managers,
+operations teams, and management users who need reliable reporting on
+sales, customers, products, sellers, payments, delivery performance, and
+customer satisfaction.
+
+1.4 Project boundaries
+
+IN SCOPE: - Nine source CSV files from the Olist dataset. - SQL Server
+database and Bronze, Silver, and Gold schemas. - Initial full load and
+repeatable load procedures. - Data profiling, cleaning, validation, and
+transformation. - Fact and dimension modelling. - SQL business
+analysis. - Power BI report connected to Gold objects. - Technical
+documentation and Git version control.
+
+OPTIONAL / FUTURE ENHANCEMENTS: - Incremental loading and change
+detection. - Automated orchestration and scheduled refresh. -
+Python-based ingestion automation. - Slowly Changing Dimensions (SCD
+Type 2). - Advanced customer segmentation (RFM). - More detailed
+geographic analysis. - Deployment to a cloud data platform.
+
+OUT OF SCOPE FOR THE FIRST VERSION: - Live transaction processing. -
+Real-time streaming. - Predictive machine learning. - Claims about
+current Brazilian e-commerce market conditions. The supplied data is
+historical and covers 2016-2018.
+
+================================================================================
+2. DATASET INFORMATION
+================================================================================
+
+2.1 Official source
+
+Dataset name: Brazilian E-Commerce Public Dataset by Olist
+
+Kaggle page: https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
+
+Publisher: Olist and dataset collaborators, published on Kaggle.
+
+Dataset description: The Kaggle description presents approximately
+100,000 orders from 2016 to 2018, covering multiple marketplaces in
+Brazil. The data is anonymized. References to companies and partners in
+review text were replaced with fictional names.
+
+Download: Download the dataset ZIP from the Kaggle page and extract the
+CSV files. The project should retain the original CSV files locally in
+data/raw/. Do not modify the source files manually.
+
+License and attribution: Review the current license displayed on the
+Kaggle dataset page before redistributing data or publishing derived
+files. Attribute the dataset to Olist and link to the Kaggle source in
+the README. A source mirror reports CC BY-NC-SA 4.0; confirm the exact
+license on Kaggle before reuse. Do not assume commercial reuse is
+permitted.
+
+2.2 Source file inventory
+
+The dataset contains nine related CSV files. The following row counts
+are commonly reported for a published snapshot and are useful as initial
+reference figures only. Different versions, extracts, or profiling
+conventions can produce slightly different counts. The downloaded files
+must be profiled and their actual counts recorded before table creation
+and loading.
+
+1)  olist_customers_dataset.csv Approximate reference rows : 99,442
+    Columns : 5 Business meaning : Customer record and customer
+    location. Expected record grain : One customer/order-specific
+    customer record. Important fields : customer_id customer_unique_id
+    customer_zip_code_prefix customer_city customer_state
+
+2)  olist_orders_dataset.csv Approximate reference rows : 99,442 Columns
+    : 8 Business meaning : Order status and lifecycle timestamps.
+    Expected record grain : One row per order. Important fields :
+    order_id customer_id order_status order_purchase_timestamp
+    order_approved_at order_delivered_carrier_date
+    order_delivered_customer_date order_estimated_delivery_date
+
+3)  olist_order_items_dataset.csv Approximate reference rows : 112,650+
+    Columns : 7 Business meaning : Products included in each order,
+    seller, price, freight, and shipping limit timestamp. Expected
+    record grain : One row per item line within an order. Important
+    fields : order_id order_item_id product_id seller_id
+    shipping_limit_date price freight_value Candidate composite key :
+    (order_id, order_item_id)
+
+4)  olist_order_payments_dataset.csv Approximate reference rows :
+    103,886+ Columns : 5 Business meaning : Payment method, sequence,
+    installments, and payment amount. Expected record grain : One row
+    per payment record within an order. Important fields : order_id
+    payment_sequential payment_type payment_installments payment_value
+    Candidate composite key : (order_id, payment_sequential)
+
+5)  olist_order_reviews_dataset.csv Approximate reference rows :
+    approximately 100,000+ Columns : 7 Business meaning : Customer
+    review score, comments, and timestamps. Expected record grain : One
+    row per review record. Important fields : review_id order_id
+    review_score review_comment_title review_comment_message
+    review_creation_date review_answer_timestamp Important note : Do not
+    assume one review per order. Profile review IDs and order IDs before
+    modelling.
+
+6)  olist_products_dataset.csv Approximate reference rows : 32,951+
+    Columns : 9 Business meaning : Product category and physical
+    attributes. Expected record grain : One row per product. Important
+    fields : product_id product_category_name product_name_lenght
+    product_description_lenght product_photos_qty product_weight_g
+    product_length_cm product_height_cm product_width_cm
+
+7)  olist_sellers_dataset.csv Approximate reference rows : 3,095+
+    Columns : 4 Business meaning : Seller identity and location.
+    Expected record grain : One row per seller. Important fields :
+    seller_id seller_zip_code_prefix seller_city seller_state
+
+8)  olist_geolocation_dataset.csv Approximate reference rows :
+    1,000,000+ Columns : 5 Business meaning : Brazilian ZIP-code prefix
+    mapped to geographic coordinates and location labels. Expected
+    record grain : One coordinate/location observation. Important fields
+    : geolocation_zip_code_prefix geolocation_lat geolocation_lng
+    geolocation_city geolocation_state Important note : Multiple records
+    can exist for the same ZIP prefix. Do not treat the ZIP prefix as a
+    unique primary key. Profile and decide whether to aggregate
+    coordinates by ZIP prefix for reporting.
+
+9)  product_category_name_translation.csv Approximate reference rows :
+    71 Columns : 2 Business meaning : Portuguese product category to
+    English name. Expected record grain : One row per category
+    translation. Important fields : product_category_name
+    product_category_name_english
+
+2.3 Key dataset concepts
+
+customer_id: Identifies the customer record associated with an order. It
+is not the same as a persistent person-level customer identity.
+
+customer_unique_id: A customer identifier that can be used to identify
+the same customer across multiple customer/order records. Use this field
+carefully when calculating unique customers and repeat purchase
+behaviour.
+
+order_id: The central identifier connecting an order to customer, item,
+payment, and review data.
+
+order_item_id: The line number of an item within an order. An order can
+contain multiple items and therefore multiple rows in the order-items
+file.
+
+product_id: Identifies a product and connects order items to product
+attributes.
+
+seller_id: Identifies the seller responsible for an item line.
+
+payment_sequential: Distinguishes payment records belonging to the same
+order.
+
+ZIP code prefix: A geographic key shared by customer/seller records and
+geolocation data. Geolocation may contain many coordinate observations
+for one prefix.
+
+2.4 Dataset limitations
+
+-   This is historical data, not a live operational feed.
+-   The time period is 2016-2018; exact minimum and maximum timestamps
+    must be verified from the downloaded data.
+-   The data is anonymized.
+-   Some fields are legitimately NULL, such as delivery timestamps for
+    orders that were not delivered.
+-   The geolocation file contains many observations and may have
+    repeated ZIP prefixes.
+-   Review records and payment records may have different row counts
+    from orders.
+-   A one-to-many join can multiply rows and inflate totals if grain is
+    ignored.
+-   Monetary values are in Brazilian Real (BRL), not Indian Rupees.
+-   City names and category values may require standardization or
+    translation.
+
+================================================================================
+3. BUSINESS QUESTIONS AND ANALYTICAL REQUIREMENTS
+================================================================================
+
+The warehouse should make it possible to answer the following questions.
+
+SALES: - What is total item sales value? - What is total freight
+value? - How many orders and order items were recorded? - What is the
+average order value? - How do sales and order volumes change month over
+month? - Which months and years have the highest sales?
+
+PRODUCT: - Which product categories generate the highest item sales? -
+Which categories have the highest order-item volume? - Which products
+have the highest sales value? - How do product dimensions and weight
+relate to freight costs?
+
+CUSTOMER: - How many distinct customers (customer_unique_id)
+purchased? - How many customers placed more than one order? - Which
+states and cities have the highest customer/order activity? - What is
+the distribution of customer purchase frequency?
+
+SELLER: - Which sellers have the highest item sales value? - Which
+sellers process the most order items? - How are sellers distributed by
+state? - How does seller location relate to delivery performance?
+
+PAYMENT: - Which payment types are most frequently used? - What is the
+total recorded payment value? - What is the distribution of installment
+counts? - How many payment records are associated with each order?
+
+DELIVERY / OPERATIONS: - What is the average time from purchase to
+delivery? - What percentage of delivered orders arrived after the
+estimated date? - Which states or sellers have longer delivery
+durations? - How many orders are cancelled, unavailable, or still in
+other statuses?
+
+CUSTOMER SATISFACTION: - What is the average review score? - What share
+of reviews are low scores (for example, 1 or 2)? - How do review scores
+relate to late delivery? - Which product categories have lower average
+review scores?
+
+Metric definitions must be written down before dashboard development.
+For example, item sales value should be defined as SUM(price) from order
+items. Freight value should be defined as SUM(freight_value). Payment
+value is a separate measure from the payment table and must not be added
+to item sales.
+
+================================================================================
+4. TARGET ARCHITECTURE AND END-TO-END DATA FLOW
+================================================================================
+
+4.1 High-level flow
+
+SOURCE CSV FILES | v LOCAL DATA LANDING AREA (data/raw/) | v SQL SERVER
+DATABASE: Olist_DataWarehouse | +——————————+ | | v | BRONZE SCHEMA | Raw
+source-aligned tables | Minimal changes; preserve source | | | v |
+SILVER SCHEMA | Clean, typed, standardized, | validated and integrated
+data | | | v | GOLD SCHEMA | Fact tables, dimensions, | business views
+and aggregates | | | v | POWER BI | Data model -> DAX measures -> |
+Report pages -> business insights | | | v | MANAGEMENT / BUSINESS USERS
+| +——————————+
+
+4.2 Database and schema naming
+
+Database: Olist_DataWarehouse
+
+Schemas: bronze silver gold control (optional, for execution logs and
+load metadata)
+
+The database should separate technical processing layers by schema
+rather than creating three unrelated databases for the first version.
+
+4.3 Bronze layer - raw landing
+
+Purpose: Retain source data in a form that is as close as practical to
+the original CSV data. Bronze is the traceable starting point for
+downstream processing.
+
+Proposed tables: bronze.olist_customers bronze.olist_orders
+bronze.olist_order_items bronze.olist_order_payments
+bronze.olist_order_reviews bronze.olist_products bronze.olist_sellers
+bronze.olist_geolocation bronze.product_category_translation
+
+Implementation: - Create source-aligned tables. - Use suitable landing
+data types; VARCHAR may be used for raw CSV fields where preserving
+original text is important. - Load CSV files using SQL Server Import
+Wizard, BULK INSERT, or a controlled Python loader. - Record source
+filename and load timestamp where practical. - Preserve NULLs and source
+values in the raw landing layer. - Do not silently deduplicate or
+overwrite source values. - Capture load errors and row counts.
+
+Recommended metadata: source_file load_datetime batch_id (optional)
+
+Bronze validation: - Compare source CSV row counts with loaded table row
+counts. - Confirm all expected source files were loaded. - Check column
+mapping and encoding. - Record rejected rows and load errors. - Confirm
+that a second load does not accidentally append duplicate data. For an
+initial full load, use a controlled truncate-and-reload process or
+batch-aware load design.
+
+4.4 Silver layer - clean and standardized data
+
+Purpose: Create reliable, typed, consistent and validated data for
+analytical use.
+
+Proposed tables: silver.customers silver.orders silver.order_items
+silver.order_payments silver.order_reviews silver.products
+silver.sellers silver.geolocation_by_zip (optional curated geography)
+silver.product_category_translation
+
+Transformations: - Convert timestamp strings to appropriate DATETIME2
+values. - Convert prices, freight and payment values to DECIMAL. -
+Convert numeric product attributes to suitable numeric types. - Trim
+unwanted whitespace from text. - Standardize state codes and category
+labels where justified. - Translate product categories using the
+translation file. - Identify duplicate candidate keys. - Validate
+allowed order statuses and payment types. - Validate review scores and
+non-negative monetary values. - Check date sequence logic. - Identify
+missing and orphan foreign keys. - Preserve valid NULLs rather than
+replacing them indiscriminately. - Quarantine invalid records with a
+reason instead of silently deleting them.
+
+Important date checks: - Purchase timestamp should not be after approval
+timestamp when approval exists, subject to source-data investigation. -
+Delivery-to-customer should not be before purchase. - Actual delivery
+should be compared with estimated delivery only for appropriate order
+statuses and non-NULL dates. - Do not label an undelivered order as late
+solely because its delivery date is NULL. Define a separate
+overdue/incomplete rule if needed.
+
+Data quality outputs: - Row counts by table. - Duplicate counts for
+candidate keys. - NULL counts by important column. - Invalid date and
+numeric counts. - Orphan relationship counts. - Rejected-row counts and
+rejection reasons.
+
+4.5 Gold layer - business-ready dimensional model
+
+Purpose: Expose a stable, understandable model for reporting and
+business analysis.
+
+The Gold layer should use a star schema where practical. Dimension
+tables describe business entities; fact tables record measurable
+business events.
+
+PROPOSED DIMENSIONS:
+
+gold.dim_customers - customer_key (surrogate primary key) -
+customer_unique_id - customer_city - customer_state -
+customer_zip_code_prefix - Other approved descriptive attributes
+
+Design note: The source customer_id is associated with an order-specific
+customer record. Use customer_unique_id for person-level customer
+analysis. Decide and document the dimension grain before implementation.
+
+gold.dim_products - product_key (surrogate primary key) - product_id
+(source business key) - product_category_name -
+product_category_name_english - product weight and dimensions - Other
+descriptive product attributes
+
+gold.dim_sellers - seller_key (surrogate primary key) - seller_id
+(source business key) - seller_city - seller_state -
+seller_zip_code_prefix
+
+gold.dim_date - date_key (for example, YYYYMMDD) - full_date - day,
+month, month_name - quarter, year - weekday and other calendar
+attributes
+
+Potential additional dimensions: - dim_order_status - dim_payment_type -
+dim_geography
+
+PROPOSED FACT TABLES:
+
+gold.fact_order_items Grain: one row per order item line (order_id +
+order_item_id). Possible columns: - order_id (degenerate dimension /
+source reference) - order_item_id - customer_key - product_key -
+seller_key - purchase_date_key - shipping_limit_date_key (if useful) -
+price - freight_value - item_count (normally 1 per line)
+
+This is the principal sales and item-level analysis fact.
+
+gold.fact_payments Grain: one row per payment record (order_id +
+payment_sequential). Possible columns: - order_id - payment_sequential -
+payment_type_key or payment type attribute - payment_installments -
+payment_value - relevant order date key (document the chosen date
+meaning)
+
+gold.fact_reviews Grain: one row per review record (verify review_id and
+order_id uniqueness). Possible columns: - review_id - order_id -
+customer_key (only if relationship is valid and unambiguous) -
+review_score - review creation date key - review answer timestamp -
+comment fields if required for analysis
+
+ORDER / DELIVERY FACT OR ORDER-LEVEL VIEW: A separate order-level fact
+or Gold view may be created for order status, order counts,
+purchase-to-delivery duration, and estimated-vs-actual delivery. Its
+grain should be one row per order. This avoids repeating order-level
+measures across multiple item lines.
+
+4.6 Critical modelling and aggregation rules
+
+-   Do not join order items directly to payments and then sum both
+    measures. An order can have multiple item rows and multiple payment
+    rows. Joining these raw grains can create a many-to-many
+    multiplication and inflate totals.
+-   Aggregate each one-to-many table to the required grain before
+    joining, or keep separate fact tables.
+-   Calculate item sales from order_items.price.
+-   Calculate freight from order_items.freight_value.
+-   Calculate recorded payment amount from order_payments.payment_value.
+-   These measures represent different business concepts and should not
+    be treated as interchangeable.
+-   Count orders using distinct order_id where the source grain is
+    item-level.
+-   Count people using distinct customer_unique_id, not customer_id.
+-   Document whether cancelled, unavailable, or other non-delivered
+    orders are included in each KPI.
+-   Define whether revenue means item price only or item price plus
+    freight.
+-   Use explicit date roles for purchase, approval, shipping and
+    delivery dates.
+-   Validate every fact table’s grain and key uniqueness before
+    reporting.
+
+================================================================================
+5. SQL SERVER IMPLEMENTATION PLAN
+================================================================================
+
+5.1 Environment
+
+Recommended tools: - Microsoft SQL Server 2025 (or a compatible SQL
+Server edition). - SQL Server Management Studio (SSMS). - SQL scripts
+stored in Git. - Optional Python for profiling or repeatable CSV
+ingestion. - Power BI Desktop for reporting. - Draw.io for architecture
+and data model diagrams.
+
+5.2 Database setup
+
+1.  Create database Olist_DataWarehouse.
+2.  Create schemas bronze, silver, gold, and optionally control.
+3.  Create raw Bronze tables.
+4.  Load the nine CSV files.
+5.  Run Bronze validation queries.
+6.  Create Silver tables with suitable data types and constraints.
+7.  Develop Silver transformation procedures.
+8.  Run Silver data-quality checks.
+9.  Design and create Gold dimensions and facts.
+10. Load Gold tables in dependency order.
+11. Create reporting views and indexes where useful.
+12. Run end-to-end reconciliation tests.
+
+5.3 SQL concepts to demonstrate
+
+DDL: CREATE DATABASE, CREATE SCHEMA, CREATE TABLE, ALTER TABLE.
+
+DML: INSERT, UPDATE, DELETE, MERGE (only where appropriate and carefully
+tested).
+
+Data transformation: CAST, CONVERT, TRY_CONVERT, COALESCE, NULLIF, CASE,
+TRIM.
+
+Analysis: JOIN, GROUP BY, HAVING, subqueries, CTEs, recursive CTEs where
+justified.
+
+Advanced SQL: ROW_NUMBER, RANK, DENSE_RANK, LAG, LEAD, SUM OVER, AVG
+OVER, conditional aggregation, date functions.
+
+Warehouse engineering: Primary keys, foreign keys, surrogate keys,
+indexes, views, stored procedures, transactions, error handling,
+execution logging.
+
+5.4 Stored procedure plan
+
+Possible procedures: - bronze.usp_load_all_raw (or individual per-file
+procedures) - silver.usp_load_customers - silver.usp_load_orders -
+silver.usp_load_order_items - silver.usp_load_order_payments -
+silver.usp_load_order_reviews - silver.usp_load_products -
+silver.usp_load_sellers - gold.usp_load_dimensions -
+gold.usp_load_facts - control.usp_log_load (optional)
+
+Use TRY…CATCH, transactions where appropriate, and logging. Keep the
+first implementation simple and understandable. Do not use MERGE merely
+for appearance; choose a safe insert/update strategy based on the load
+design.
+
+5.5 Load execution sequence
+
+Initial full load: 1. Load all source CSV files into Bronze. 2. Validate
+Bronze row counts and file completeness. 3. Load Silver reference tables
+such as products, sellers, customers, and category translations. 4. Load
+Silver orders, items, payments, reviews, and geography. 5. Run Silver
+quality checks. 6. Load Gold dimensions. 7. Load Gold fact tables after
+dimension keys are available. 8. Run Gold reconciliation tests. 9.
+Refresh Power BI.
+
+The exact order can be adjusted based on foreign-key dependencies.
+
+================================================================================
+6. POWER BI REPORTING PLAN
+================================================================================
+
+6.1 Data flow into Power BI
+
+SQL Server database (Olist_DataWarehouse) | v Gold dimension and fact
+tables / reporting views | v Power BI Desktop - SQL Server connector | v
+Power BI semantic model | +–> Relationships +–> DAX measures +–> Date
+table / date relationships +–> Report visuals and slicers | v Published
+report / Power BI Service (optional)
+
+Power BI should connect to the Gold layer, not independently re-create
+the Bronze-to-Silver cleaning pipeline. The warehouse should own
+repeatable data preparation and business logic wherever possible.
+
+6.2 Proposed report pages
+
+PAGE 1 - EXECUTIVE / SALES OVERVIEW Purpose: Give management a quick
+view of sales and order performance.
+
+Possible KPIs: - Item Sales Value - Freight Value - Distinct Orders -
+Order Items - Unique Customers - Average Order Value
+
+Possible visuals: - Monthly sales trend - Orders by status - Sales by
+state - Top product categories - Year/month slicers
+
+PAGE 2 - PRODUCT AND SELLER PERFORMANCE Purpose: Understand
+product-category and seller contribution.
+
+Possible visuals: - Sales by product category - Top 10 categories by
+item sales - Top sellers by item sales - Order-item volume by category -
+Average freight by category - Seller state distribution
+
+PAGE 3 - CUSTOMER ANALYTICS Purpose: Understand customer base, geography
+and repeat behaviour.
+
+Possible visuals: - Unique customers - Repeat customer count and rate -
+Orders by customer state - Customer purchase frequency - Monthly
+customer acquisition trend - Customer location map (if geographic data
+is sufficiently clean)
+
+PAGE 4 - DELIVERY AND CUSTOMER SATISFACTION Purpose: Monitor logistics
+and customer experience.
+
+Possible KPIs: - Delivered orders - Average delivery days - Late
+delivery percentage - Average review score - Low-score review percentage
+
+Possible visuals: - Actual vs estimated delivery - Delivery days by
+state - Late delivery rate by seller/state - Review score distribution -
+Review score vs delivery delay
+
+6.3 Example DAX measures (illustrative)
+
+Item Sales := SUM ( fact_order_items[price] )
+
+Freight Value := SUM ( fact_order_items[freight_value] )
+
+Order Count := DISTINCTCOUNT ( fact_order_items[order_id] )
+
+Order Item Count := COUNTROWS ( fact_order_items )
+
+Unique Customers := DISTINCTCOUNT ( dim_customers[customer_unique_id] )
+
+Average Order Value := DIVIDE ( [Item Sales], [Order Count] )
+
+Important: These are illustrative starting measures. Confirm table
+relationships, filter direction, fact grain, and KPI definitions before
+using them. An order-level fact may be a better source for order counts
+and delivery KPIs.
+
+6.4 Dashboard design principles
+
+-   Use a consistent layout, font hierarchy and number formatting.
+-   Display currency as BRL (R$) because the source is Brazilian.
+-   Clearly label historical date coverage.
+-   Use slicers consistently across relevant pages.
+-   Avoid overcrowding pages with too many visuals.
+-   Add tooltip definitions for non-obvious KPIs.
+-   Show the selected date range.
+-   Validate dashboard totals against SQL queries.
+-   Do not imply that historical figures describe today’s market.
+
+================================================================================
+7. DATA QUALITY, TESTING AND RECONCILIATION
+================================================================================
+
+Testing is a core deliverable, not an optional final step.
+
+7.1 Bronze checks
+
+-   All nine expected source files exist.
+-   File names and column mappings are correct.
+-   Source and loaded row counts match.
+-   File encoding and date parsing issues are documented.
+-   Load failures are captured.
+-   Repeated execution does not append accidental duplicate batches.
+
+7.2 Silver checks
+
+-   Candidate primary keys are unique where expected.
+-   Required identifiers are not NULL.
+-   Numeric values can be converted safely.
+-   Price, freight and payment values are checked for invalid negatives.
+-   Review scores are within the source’s valid range (profile before
+    enforcing).
+-   Date sequences are logically checked.
+-   Foreign-key relationships are checked.
+-   Missing values are classified as valid, suspicious, or invalid.
+-   Duplicate and rejected rows are counted and explained.
+
+7.3 Gold checks
+
+-   Dimension surrogate keys are unique.
+-   Fact rows have valid dimension references.
+-   Fact table grain is respected.
+-   No unintended many-to-many join multiplication occurs.
+-   Item sales reconcile with Silver order-item data.
+-   Freight totals reconcile with Silver order-item data.
+-   Payment totals reconcile with Silver payment data.
+-   Order counts reconcile using distinct order IDs.
+-   Power BI totals match SQL validation queries.
+
+7.4 Reconciliation examples
+
+Bronze vs source: Source CSV row count = Bronze table row count (unless
+rejected rows are explicitly documented).
+
+Silver vs Bronze: Silver count may differ when invalid records are
+quarantined or when a documented deduplication rule is applied. Every
+difference must be explained.
+
+Gold vs Silver: Gold measures should reconcile to the appropriate Silver
+source at the same business grain and under the same filters.
+
+Do not expect the sum of order-item price to equal the sum of payment
+value without investigating business definitions, order statuses, and
+grain.
+
+================================================================================
+8. PROJECT FOLDER AND GITHUB STRUCTURE
+================================================================================
+
+Suggested repository:
+
+Olist-SQL-Data-Warehouse/ | |– data/ | |– raw/ (local source CSV files;
+normally gitignored) | |– README.txt (download and placement
+instructions) | |– sql/ | |– 00_database_setup/ | |– 01_bronze/ | | |–
+ddl/ | | |– load/ | | |– validation/ | |– 02_silver/ | | |– ddl/ | | |–
+transformations/ | | |– quality_checks/ | |– 03_gold/ | | |– dimensions/
+| | |– facts/ | | |– views/ | | |– validation/ | |– 04_analysis/ | |–
+powerbi/ | |– Olist_Dashboard.pbix | |– screenshots/ | |– docs/ | |–
+PROJECT_DOCUMENTATION.txt | |– architecture.png | |–
+source_relationships.png | |– star_schema.png | |– data_dictionary.txt |
+|– data_quality_report.txt | |– tests/ |– README.md |– .gitignore
+
+Git recommendations: - Do not commit large raw CSV files by default. -
+Include Kaggle source URL, download instructions, and file names. - Do
+not commit credentials, connection strings containing passwords, or
+private configuration files. - Commit SQL scripts, documentation,
+diagrams, and selected dashboard screenshots. - Check dataset licensing
+before redistributing source data or extracts.
+
+================================================================================
+9. PROJECT MILESTONES AND COMPLETION CRITERIA
+================================================================================
+
+MILESTONE 1 - DATASET UNDERSTANDING - Download and extract all nine
+files. - Record actual rows, columns, data types and missing values. -
+Understand candidate keys, grain and relationships. - Create source data
+dictionary. Completion: Dataset profiling report is saved.
+
+MILESTONE 2 - BRONZE IMPLEMENTATION - Create database and Bronze
+schema. - Create nine raw tables. - Load all CSV files. - Compare source
+and loaded row counts. Completion: Raw source data is traceably loaded.
+
+MILESTONE 3 - SILVER IMPLEMENTATION - Create typed Silver tables. -
+Build cleaning and standardization procedures. - Identify and quarantine
+invalid records. - Run data quality checks. Completion: Silver tables
+are reliable and documented.
+
+MILESTONE 4 - GOLD IMPLEMENTATION - Finalize fact table grains. - Create
+dimensions and surrogate keys. - Create fact tables and reporting
+views. - Reconcile facts to Silver. Completion: Star schema is queryable
+and validated.
+
+MILESTONE 5 - SQL BUSINESS ANALYSIS - Write business queries for sales,
+products, customers, sellers, payments, delivery, and reviews. - Use
+CTEs, window functions, aggregations and joins appropriately.
+Completion: SQL analysis scripts answer the documented business
+questions.
+
+MILESTONE 6 - POWER BI - Connect to SQL Server Gold objects. - Create
+semantic model and relationships. - Create DAX measures. - Build the
+four report pages. - Reconcile Power BI values against SQL. Completion:
+Dashboard is accurate and usable.
+
+MILESTONE 7 - DOCUMENTATION AND PORTFOLIO - Add architecture and schema
+diagrams. - Complete README and data dictionary. - Add screenshots and
+setup instructions. - Verify repository cleanliness and licensing notes.
+Completion: Another person can understand and reproduce the project.
+
+================================================================================
+10. RISKS AND DESIGN DECISIONS TO RECORD
+================================================================================
+
+1.  SOURCE COUNT DIFFERENCES Published row counts are reference values.
+    Record exact counts from the files downloaded for this
+    implementation.
+
+2.  NULL VALUES Do not replace every NULL with zero, blank text, or a
+    default date. Define treatment by column and business meaning.
+
+3.  DUPLICATES Distinguish genuine duplicate records from valid multiple
+    item, payment, or review records. Never deduplicate only because
+    values look similar.
+
+4.  FACT TABLE GRAIN Document one row’s meaning for every fact table
+    before writing joins.
+
+5.  DOUBLE COUNTING Keep order items, payments, and reviews at their own
+    grains or aggregate before joining. Validate totals after every
+    model change.
+
+6.  CUSTOMER IDENTITY Distinguish customer_id from customer_unique_id in
+    all customer metrics.
+
+7.  DELIVERY METRICS Define delivered, late, cancelled, unavailable, and
+    undelivered statuses carefully. Handle missing delivery timestamps
+    explicitly.
+
+8.  HISTORICAL DATA Report the source period and avoid presenting the
+    dataset as current.
+
+9.  GEOGRAPHY ZIP-prefix-to-coordinate relationships may not be
+    one-to-one. Profile, aggregate, or select representative coordinates
+    with a documented rule.
+
+10. LICENSE Confirm the Kaggle license and attribution obligations
+    before sharing source data, extracts, or derivative datasets.
+
+================================================================================
+11. DEFINITION OF DONE
+================================================================================
+
+The project can be considered portfolio-ready when:
+
+[ ] All nine CSV source files are documented. [ ] Actual source
+profiling and row counts are recorded. [ ] Bronze tables load and
+reconcile with source files. [ ] Silver transformations are repeatable
+and tested. [ ] Invalid records and data-quality issues are documented.
+[ ] Gold fact grains and dimensions are documented. [ ] Gold measures
+reconcile with Silver. [ ] Business SQL queries are included. [ ] Power
+BI connects to Gold objects. [ ] Dashboard KPIs reconcile with SQL. [ ]
+Architecture and star-schema diagrams are included. [ ] README explains
+setup, execution, and dataset source. [ ] License and attribution are
+respected. [ ] No credentials or unnecessary raw data are committed.
+
+================================================================================
+12. REFERENCE LINKS
+================================================================================
+
+PRIMARY DATASET:
+https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
+
+KAGGLE DATASET DESCRIPTION:
+https://www.kaggle.com/olistbr/brazilian-ecommerce/home/
+
+MICROSOFT - MEDALLION ARCHITECTURE / DATA PLATFORM CONCEPTS:
+https://learn.microsoft.com/en-us/azure/databricks/lakehouse/medallion
+
+MICROSOFT - SQL SERVER DOCUMENTATION:
+https://learn.microsoft.com/en-us/sql/sql-server/
+
+MICROSOFT - POWER BI DOCUMENTATION:
+https://learn.microsoft.com/en-us/power-bi/
+
+Note: Reference URLs and product documentation may change. Confirm
+current product documentation and the dataset license when implementing
+the project.
+
+================================================================================
+END OF DOCUMENT
+================================================================================
