@@ -10,6 +10,9 @@ Explanation
 USE OlistStore_DW;
 GO
 -- olist_orders
+-- before creting any table use this 
+IF OBJECT_ID ('bronze.olist_orders', 'U') IS NOT NULL 
+    DROP TABLE bronze.olist_orders;
 CREATE TABLE bronze.olist_orders
 (
     order_id VARCHAR(50),
