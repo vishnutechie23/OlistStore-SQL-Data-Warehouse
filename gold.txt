@@ -1,0 +1,70 @@
+dim_customers final status
+Validation	            Result
+DDL structure	        Passed
+Row count	            Passed
+Unique customer ID	    Passed
+NULL check	            Passed
+Duplicate check	        Passed
+Silver vs Gold values	Passed
+Surrogate key	        Passed
+
+
+gold.dim_products — Completed
+All validations passed:
+- Table structure created
+- 32,951 rows loaded
+- Row count matched with Silver
+- No duplicate product IDs
+- NULL values checked and preserved
+- Silver vs Gold mismatches = 0
+- Surrogate keys unique and sequential
+
+
+gold.dim_sellers — Completed
+All validations passed:
+-  Table created
+-  3,095 rows loaded
+-  No duplicate seller IDs
+-  No NULL values
+-  Silver vs Gold mismatches = 0
+-  Surrogate keys unique and sequential
+
+
+gold.dim_date — Completed
+- 1,096 calendar dates generated
+- Date range: 2016–2018
+- Unique date keys and dates
+- Day, month, quarter and year attributes
+- ISO week and ISO year validated
+- Weekend calculation validated
+- Date key consistency checked
+
+
+gold.dim_payment_type — Completed
+- Table created
+- 5 payment types loaded
+- No duplicates
+- No NULLs
+- Silver vs Gold unmatched = 0
+
+
+gold.dim_order_status — Completed
+-  Table created
+-  8 order statuses loaded
+-  No duplicates
+-  No NULLs
+-  Silver vs Gold unmatched = 0
+
+
+gold.fact_orders — Completed
+- Table structure verified
+- 99,441 orders loaded
+- One row per order
+- NULL checks passed
+- Customer, status and date relationships passed
+- Delivery flags validated
+- Duration calculations validated
+- Early/on-time/late delivery distribution checked
+- All 8 order statuses reconciled
+
+
