@@ -1,3 +1,12 @@
+-- =====================================================
+-- Gold Layer: Table Creation
+-- Project: Olist Store SQL Data Warehouse
+-- Purpose: Create Gold dimension and fact tables
+--          with primary keys, foreign keys and constraints
+-- Total Tables: 10 (6 Dimensions + 4 Facts)
+-- =====================================================
+
+
 USE OlistStore_DW;
 GO
 
@@ -34,89 +43,6 @@ WHERE TABLE_SCHEMA = 'gold'
 ORDER BY ORDINAL_POSITION;
 
 
--- Load Customers into Gold  :  Ab Silver se Gold mein data insert karenge.
-INSERT INTO gold.dim_customers
-(
-    customer_id,
-    customer_unique_id,
-    customer_zip_code_prefix,
-    customer_city,
-    customer_state
-)
-SELECT
-    customer_id,
-    customer_unique_id,
-    customer_zip_code_prefix,
-    customer_city,
-    customer_state
-FROM silver.olist_customers;
-GO
-
-/*
-Kya hoga?
-- Silver ke 99,441 customers Gold mein load honge.
-- customer_key automatically generate hoga.
-- Original customer IDs preserve rahengi.*/
-
--- Checking insert 
-SELECT
-    (SELECT COUNT_BIG(*) FROM silver.olist_customers) AS silver_rows,
-    (SELECT COUNT_BIG(*) FROM gold.dim_customers) AS gold_rows;
-
--- Check duplicate customer IDs
-SELECT
-    COUNT(*) AS total_rows,
-    COUNT(DISTINCT customer_id) AS unique_customer_ids,
-    COUNT(DISTINCT customer_unique_id) AS unique_person_ids
-FROM gold.dim_customers;
--- Purpose: Verify karna ki customer IDs unique hain aur person-level IDs kitne distinct hain.
-
--- Check NULL values
-SELECT
-    SUM(CASE WHEN customer_id IS NULL THEN 1 ELSE 0 END) AS null_customer_id,
-    SUM(CASE WHEN customer_unique_id IS NULL THEN 1 ELSE 0 END) AS null_unique_id,
-    SUM(CASE WHEN customer_zip_code_prefix IS NULL THEN 1 ELSE 0 END) AS null_zip,
-    SUM(CASE WHEN customer_city IS NULL THEN 1 ELSE 0 END) AS null_city,
-    SUM(CASE WHEN customer_state IS NULL THEN 1 ELSE 0 END) AS null_state
-FROM gold.dim_customers;
-
--- Check duplicate rows
-SELECT
-    customer_id,
-    COUNT(*) AS duplicate_count
-FROM gold.dim_customers
-GROUP BY customer_id
-HAVING COUNT(*) > 1;
-
-/*
-DDL created
-99,441 rows loaded
-Row count matched
-Customer IDs unique
-NULL validation passed
-Duplicate validation passed
-*/
-
--- Verify Silver vs Gold data : Check karenge ki actual customer data dono layers mein same hai.
-SELECT COUNT(*) AS mismatched_records
-FROM silver.olist_customers s
-INNER JOIN gold.dim_customers g
-    ON s.customer_id = g.customer_id
-WHERE
-    ISNULL(s.customer_unique_id, '') <> ISNULL(g.customer_unique_id, '')
-    OR ISNULL(s.customer_zip_code_prefix, '') <> ISNULL(g.customer_zip_code_prefix, '')
-    OR ISNULL(s.customer_city, '') <> ISNULL(g.customer_city, '')
-    OR ISNULL(s.customer_state, '') <> ISNULL(g.customer_state, '');
-
--- Verify customer_key : Ab surrogate key check karenge ki automatically generate hui hai aur unique hai.
-SELECT
-    COUNT(*) AS total_rows,
-    COUNT(customer_key) AS non_null_keys,
-    COUNT(DISTINCT customer_key) AS unique_keys,
-    MIN(customer_key) AS first_key,
-    MAX(customer_key) AS last_key
-FROM gold.dim_customers;
-
 
 -- 02_TABLE : Create dim_products
 CREATE TABLE gold.dim_products
@@ -137,95 +63,6 @@ CREATE TABLE gold.dim_products
 );
 GO
 
--- Load dim_products :
-INSERT INTO gold.dim_products
-(
-    product_id,
-    product_category_name,
-    product_category_name_english,
-    product_name_length,
-    product_description_length,
-    product_photos_qty,
-    product_weight_g,
-    product_length_cm,
-    product_height_cm,
-    product_width_cm
-)
-SELECT
-    product_id,
-    product_category_name,
-    product_category_name_english,
-    product_name_length,
-    product_description_length,
-    product_photos_qty,
-    product_weight_g,
-    product_length_cm,
-    product_height_cm,
-    product_width_cm
-FROM silver.olist_products;
-GO
-
--- Validate row count : Check karo Silver aur Gold mein same number of products hain ya nahi.
-SELECT
-    (SELECT COUNT(*) FROM silver.olist_products) AS silver_rows,
-    (SELECT COUNT(*) FROM gold.dim_products) AS gold_rows;
-
--- Check duplicate product IDs
-SELECT
-    product_id,
-    COUNT(*) AS duplicate_count
-FROM gold.dim_products
-GROUP BY product_id
-HAVING COUNT(*) > 1;
-
--- Check NULL values
-SELECT
-    SUM(CASE WHEN product_id IS NULL THEN 1 ELSE 0 END) AS null_product_id,
-    SUM(CASE WHEN product_category_name IS NULL THEN 1 ELSE 0 END) AS null_category,
-    SUM(CASE WHEN product_category_name_english IS NULL THEN 1 ELSE 0 END) AS null_english_category,
-    SUM(CASE WHEN product_weight_g IS NULL THEN 1 ELSE 0 END) AS null_weight,
-    SUM(CASE WHEN product_length_cm IS NULL THEN 1 ELSE 0 END) AS null_length,
-    SUM(CASE WHEN product_height_cm IS NULL THEN 1 ELSE 0 END) AS null_height,
-    SUM(CASE WHEN product_width_cm IS NULL THEN 1 ELSE 0 END) AS null_width
-FROM gold.dim_products;
-
-/*
-Column	                            NULL rows	Status
-product_id	                                0	Passed
-product_category_name	                  610	Expected
-product_category_name_english	          623	Expected
-product_weight_g	                        2	Expected
-product_length_cm	                        2	Expected
-product_height_cm	                        2	Expected
-product_width_cm	                        2	Expected
-*/
-
--- Check Silver vs Gold mismatches
-SELECT COUNT(*) AS mismatched_records
-FROM silver.olist_products s
-INNER JOIN gold.dim_products g
-    ON s.product_id = g.product_id
-WHERE
-    ISNULL(s.product_category_name, '') <> ISNULL(g.product_category_name, '')
-    OR ISNULL(s.product_category_name_english, '') <> ISNULL(g.product_category_name_english, '')
-    OR ISNULL(s.product_name_length, -1) <> ISNULL(g.product_name_length, -1)
-    OR ISNULL(s.product_description_length, -1) <> ISNULL(g.product_description_length, -1)
-    OR ISNULL(s.product_photos_qty, -1) <> ISNULL(g.product_photos_qty, -1)
-    OR ISNULL(s.product_weight_g, -1) <> ISNULL(g.product_weight_g, -1)
-    OR ISNULL(s.product_length_cm, -1) <> ISNULL(g.product_length_cm, -1)
-    OR ISNULL(s.product_height_cm, -1) <> ISNULL(g.product_height_cm, -1)
-    OR ISNULL(s.product_width_cm, -1) <> ISNULL(g.product_width_cm, -1);
-
--- Validate surrogate key
-SELECT
-    COUNT(*) AS total_rows,
-    COUNT(product_key) AS non_null_keys,
-    COUNT(DISTINCT product_key) AS unique_keys,
-    MIN(product_key) AS first_key,
-    MAX(product_key) AS last_key
-FROM gold.dim_products;
-
-
 
 -- 03_TABLE : Create gold.dim_sellers
 CREATE TABLE gold.dim_sellers
@@ -239,63 +76,6 @@ CREATE TABLE gold.dim_sellers
     CONSTRAINT UQ_dim_sellers_seller_id UNIQUE (seller_id)
 );
 GO
-
--- Load dim_seller
-INSERT INTO gold.dim_sellers
-(
-    seller_id,
-    seller_zip_code_prefix,
-    seller_city,
-    seller_state
-)
-SELECT
-    seller_id,
-    seller_zip_code_prefix,
-    seller_city,
-    seller_state
-FROM silver.olist_sellers;
-GO
-
--- Validate row count
-SELECT
-    (SELECT COUNT(*) FROM silver.olist_sellers) AS silver_rows,
-    (SELECT COUNT(*) FROM gold.dim_sellers) AS gold_rows;
-
--- Check duplicate seller IDs
-SELECT
-    seller_id,
-    COUNT(*) AS duplicate_count
-FROM gold.dim_sellers
-GROUP BY seller_id
-HAVING COUNT(*) > 1;
-
--- Check NULL values
-SELECT
-    SUM(CASE WHEN seller_id IS NULL THEN 1 ELSE 0 END) AS null_seller_id,
-    SUM(CASE WHEN seller_zip_code_prefix IS NULL THEN 1 ELSE 0 END) AS null_zip,
-    SUM(CASE WHEN seller_city IS NULL THEN 1 ELSE 0 END) AS null_city,
-    SUM(CASE WHEN seller_state IS NULL THEN 1 ELSE 0 END) AS null_state
-FROM gold.dim_sellers;
-
--- Silver vs Gold mismatch check
-SELECT COUNT(*) AS mismatched_records
-FROM silver.olist_sellers s
-INNER JOIN gold.dim_sellers g
-    ON s.seller_id = g.seller_id
-WHERE
-    ISNULL(s.seller_zip_code_prefix, '') <> ISNULL(g.seller_zip_code_prefix, '')
-    OR ISNULL(s.seller_city, '') <> ISNULL(g.seller_city, '')
-    OR ISNULL(s.seller_state, '') <> ISNULL(g.seller_state, '');
-
--- Validate surrogate key
-SELECT
-    COUNT(*) AS total_rows,
-    COUNT(seller_key) AS non_null_keys,
-    COUNT(DISTINCT seller_key) AS unique_keys,
-    MIN(seller_key) AS first_key,
-    MAX(seller_key) AS last_key
-FROM gold.dim_sellers;
-
 
 
 -- 04_TABLE : Create gold.dim_date
@@ -326,132 +106,6 @@ Important:
 
 -- Populate dim_date : Hum calendar range 1 Jan 2016 – 31 Dec 2018 rakhenge, taaki Olist dataset ke saare relevant dates cover ho sakein.
 
-SET LANGUAGE us_english;
-GO
-
-WITH DateSeries AS
-(
-    SELECT CAST('2016-01-01' AS DATE) AS calendar_date
-
-    UNION ALL
-
-    SELECT DATEADD(DAY, 1, calendar_date)
-    FROM DateSeries
-    WHERE calendar_date < '2018-12-31'
-)
-INSERT INTO gold.dim_date
-(
-    date_key,
-    full_date,
-    day_number,
-    month_number,
-    month_name,
-    quarter_number,
-    year_number,
-    week_number,
-    day_of_week,
-    day_name,
-    is_weekend
-)
-SELECT
-    CONVERT(INT, CONVERT(CHAR(8), calendar_date, 112)),
-    calendar_date,
-    DAY(calendar_date),
-    MONTH(calendar_date),
-    DATENAME(MONTH, calendar_date),
-    DATEPART(QUARTER, calendar_date),
-    YEAR(calendar_date),
-    DATEPART(ISO_WEEK, calendar_date),
-    (DATEDIFF(DAY, '19000101', calendar_date) % 7) + 1,
-    DATENAME(WEEKDAY, calendar_date),
-    CASE
-        WHEN (DATEDIFF(DAY, '19000101', calendar_date) % 7) + 1 IN (6, 7)
-        THEN 1
-        ELSE 0
-    END
-FROM DateSeries
-OPTION (MAXRECURSION 0);
-GO
-
-/*
-What this does:
-- Recursive CTE generates every calendar date.
-- date_key creates YYYYMMDD format.
-- day_of_week: Monday = 1, Sunday = 7.
-- week_number: ISO week number.
-- is_weekend: Saturday/Sunday = 1.*/
-
-SELECT COUNT(*) AS total_rows
-FROM gold.dim_date;
-
--- Validate date range and duplicates
-SELECT
-    COUNT(*) AS total_rows,
-    COUNT(DISTINCT date_key) AS unique_date_keys,
-    COUNT(DISTINCT full_date) AS unique_dates,
-    MIN(full_date) AS first_date,
-    MAX(full_date) AS last_date
-FROM gold.dim_date;
-
--- Validate date attributes
--- Ab check karenge ki month, quarter, weekday aur weekend correctly calculate hue hain.
-SELECT TOP 15
-    full_date,
-    day_number,
-    month_number,
-    month_name,
-    quarter_number,
-    year_number,
-    week_number,
-    day_of_week,
-    day_name,
-    is_weekend
-FROM gold.dim_date
-ORDER BY full_date;
-
--- 
-ALTER TABLE gold.dim_date
-ADD iso_year_number SMALLINT NULL;
-GO
-
-UPDATE gold.dim_date
-SET iso_year_number =
-    YEAR(
-        DATEADD(
-            DAY,
-            4 - day_of_week,
-            full_date
-        )
-    );
-GO
-
-ALTER TABLE gold.dim_date
-ALTER COLUMN iso_year_number SMALLINT NOT NULL;
-GO
-
--- check ISO year
-SELECT
-    full_date,
-    year_number,
-    week_number,
-    iso_year_number,
-    day_name
-FROM gold.dim_date
-WHERE full_date BETWEEN '2015-12-28' AND '2016-01-04'
-ORDER BY full_date;
-
--- Validate weekend counts
-SELECT
-    is_weekend,
-    COUNT(*) AS total_days
-FROM gold.dim_date
-GROUP BY is_weekend;
-
--- Validate date key consistency : Check karenge ki date_key aur full_date match karte hain.
-SELECT COUNT(*) AS invalid_date_keys
-FROM gold.dim_date
-WHERE date_key <> CONVERT(INT, CONVERT(CHAR(8), full_date, 112));
-
 
 
 -- 05_TABLE : Create gold.dim_payment_type
@@ -465,42 +119,6 @@ CREATE TABLE gold.dim_payment_type
 );
 GO
 
--- Load dim_payment_type
-INSERT INTO gold.dim_payment_type (payment_type)
-SELECT DISTINCT payment_type
-FROM silver.olist_order_payments
-WHERE payment_type IS NOT NULL;
-GO
-
--- Check payment types
-SELECT
-    payment_type_key,
-    payment_type
-FROM gold.dim_payment_type
-ORDER BY payment_type_key;
-
--- Validate duplicates and NULLs
-SELECT
-    COUNT(*) AS total_rows,
-    COUNT(DISTINCT payment_type) AS unique_types,
-    SUM(CASE WHEN payment_type IS NULL THEN 1 ELSE 0 END) AS null_types
-FROM gold.dim_payment_type;
-
--- Validate against Silver
-SELECT COUNT(DISTINCT payment_type) AS silver_types
-FROM silver.olist_order_payments
-WHERE payment_type IS NOT NULL;
-
-SELECT COUNT(*) AS unmatched_types
-FROM
-(
-    SELECT DISTINCT payment_type
-    FROM silver.olist_order_payments
-    WHERE payment_type IS NOT NULL
-) s
-LEFT JOIN gold.dim_payment_type g
-    ON s.payment_type = g.payment_type
-WHERE g.payment_type IS NULL;
 
 
 -- 06_TABLE : Create gold.dim_order_status
@@ -513,41 +131,218 @@ CREATE TABLE gold.dim_order_status
 );
 GO
 
--- Load dim_order_status
-INSERT INTO gold.dim_order_status (order_status)
-SELECT DISTINCT order_status
-FROM silver.olist_orders
-WHERE order_status IS NOT NULL;
+
+
+
+-- 07_TABLE : Create gold.fact_orders
+/*
+Important columns:
+- order_id: One unique order.
+- Date keys: Connect the same date dimension for different order events.
+- approval_hours: Time taken for approval.
+- delivery_days: Purchase to actual customer delivery.
+- delivery_delay_days: Actual delivery date minus estimated delivery date.
+- is_delivered / is_canceled: Business analysis flags.
+*/
+CREATE TABLE gold.fact_orders
+(
+    order_id VARCHAR(50) NOT NULL PRIMARY KEY,
+
+    customer_key BIGINT NOT NULL,
+    order_status_key INT NOT NULL,
+
+    purchase_date_key INT NOT NULL,
+    approved_date_key INT,
+    delivered_carrier_date_key INT,
+    delivered_customer_date_key INT,
+    estimated_delivery_date_key INT,
+
+    order_count TINYINT NOT NULL DEFAULT 1,
+
+    approval_hours DECIMAL(10,2),
+    delivery_days INT,
+    estimated_delivery_days INT,
+    delivery_delay_days INT,
+
+    is_delivered BIT NOT NULL,
+    is_canceled BIT NOT NULL,
+
+    CONSTRAINT FK_fact_orders_customers
+        FOREIGN KEY (customer_key)
+        REFERENCES gold.dim_customers(customer_key),
+
+    CONSTRAINT FK_fact_orders_status
+        FOREIGN KEY (order_status_key)
+        REFERENCES gold.dim_order_status(order_status_key),
+
+    CONSTRAINT FK_fact_orders_purchase_date
+        FOREIGN KEY (purchase_date_key)
+        REFERENCES gold.dim_date(date_key),
+
+    CONSTRAINT FK_fact_orders_approved_date
+        FOREIGN KEY (approved_date_key)
+        REFERENCES gold.dim_date(date_key),
+
+    CONSTRAINT FK_fact_orders_carrier_date
+        FOREIGN KEY (delivered_carrier_date_key)
+        REFERENCES gold.dim_date(date_key),
+
+    CONSTRAINT FK_fact_orders_customer_delivery_date
+        FOREIGN KEY (delivered_customer_date_key)
+        REFERENCES gold.dim_date(date_key),
+
+    CONSTRAINT FK_fact_orders_estimated_date
+        FOREIGN KEY (estimated_delivery_date_key)
+        REFERENCES gold.dim_date(date_key)
+);
 GO
 
--- Check loaded order statuses
+-- Verify fact_orders structure
 SELECT
-    order_status_key,
-    order_status
-FROM gold.dim_order_status
-ORDER BY order_status_key;
+    COLUMN_NAME,
+    DATA_TYPE,
+    IS_NULLABLE
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = 'gold'
+  AND TABLE_NAME = 'fact_orders'
+ORDER BY ORDINAL_POSITION;
 
--- Validate duplicates and NULLs
-SELECT
-    COUNT(*) AS total_rows,
-    COUNT(DISTINCT order_status) AS unique_statuses,
-    SUM(CASE WHEN order_status IS NULL THEN 1 ELSE 0 END) AS null_statuses
-FROM gold.dim_order_status;
 
--- Validate against Silver
-SELECT COUNT(DISTINCT order_status) AS silver_statuses
-FROM silver.olist_orders
-WHERE order_status IS NOT NULL;
 
-SELECT COUNT(*) AS unmatched_statuses
-FROM
+-- 08_TABLE : Create gold.fact_orders
+-- Grain: One row per order item line (order_id + order_item_id)
+CREATE TABLE gold.fact_order_items
 (
-    SELECT DISTINCT order_status
-    FROM silver.olist_orders
-    WHERE order_status IS NOT NULL
-) s
-LEFT JOIN gold.dim_order_status g
-    ON s.order_status = g.order_status
-WHERE g.order_status IS NULL;
+    order_id VARCHAR(50) NOT NULL,
+    order_item_id INT NOT NULL,
+
+    customer_key BIGINT NOT NULL,
+    product_key BIGINT NOT NULL,
+    seller_key BIGINT NOT NULL,
+
+    purchase_date_key INT NOT NULL,
+    shipping_limit_date_key INT,
+
+    item_count TINYINT NOT NULL DEFAULT 1,
+
+    price DECIMAL(10,2) NOT NULL,
+    freight_value DECIMAL(10,2) NOT NULL,
+    item_total_value DECIMAL(10,2) NOT NULL,
+
+    CONSTRAINT PK_fact_order_items
+        PRIMARY KEY (order_id, order_item_id),
+
+    CONSTRAINT FK_fact_order_items_customers
+        FOREIGN KEY (customer_key)
+        REFERENCES gold.dim_customers(customer_key),
+
+    CONSTRAINT FK_fact_order_items_products
+        FOREIGN KEY (product_key)
+        REFERENCES gold.dim_products(product_key),
+
+    CONSTRAINT FK_fact_order_items_sellers
+        FOREIGN KEY (seller_key)
+        REFERENCES gold.dim_sellers(seller_key),
+
+    CONSTRAINT FK_fact_order_items_purchase_date
+        FOREIGN KEY (purchase_date_key)
+        REFERENCES gold.dim_date(date_key),
+
+    CONSTRAINT FK_fact_order_items_shipping_date
+        FOREIGN KEY (shipping_limit_date_key)
+        REFERENCES gold.dim_date(date_key)
+);
+GO
+
+/*
+Key points:
+- Composite primary key ensures each order item line is unique.
+- item_total_value = price + freight_value.
+- order_id is retained for traceability; no fact-to-fact foreign key is created.
+- Customer, product and seller keys support analysis.*/
+
+
+
+
+
+-- 09_TABLE : Create gold.fact_payments – Step 1
+-- Grain: One row per payment transaction (order_id + payment_sequential).
+
+CREATE TABLE gold.fact_payments
+(
+    order_id VARCHAR(50) NOT NULL,
+    payment_sequential INT NOT NULL,
+
+    customer_key BIGINT NOT NULL,
+    payment_type_key INT NOT NULL,
+    purchase_date_key INT NOT NULL,
+
+    payment_count TINYINT NOT NULL DEFAULT 1,
+
+    payment_installments INT,
+    payment_value DECIMAL(10,2) NOT NULL,
+
+    CONSTRAINT PK_fact_payments
+        PRIMARY KEY (order_id, payment_sequential),
+
+    CONSTRAINT FK_fact_payments_customers
+        FOREIGN KEY (customer_key)
+        REFERENCES gold.dim_customers(customer_key),
+
+    CONSTRAINT FK_fact_payments_type
+        FOREIGN KEY (payment_type_key)
+        REFERENCES gold.dim_payment_type(payment_type_key),
+
+    CONSTRAINT FK_fact_payments_date
+        FOREIGN KEY (purchase_date_key)
+        REFERENCES gold.dim_date(date_key)
+);
+GO
+-- This stores payment amount, type, installments and customer/date keys.
+
+
+
+
+-- 10_TABLE : Create tableGrain: One row per review record.
+CREATE TABLE gold.fact_reviews
+(
+    review_id VARCHAR(50) NOT NULL,
+    order_id VARCHAR(50) NOT NULL,
+
+    customer_key BIGINT NOT NULL,
+
+    review_creation_date_key INT,
+    review_answer_date_key INT,
+
+    review_count TINYINT NOT NULL DEFAULT 1,
+    review_score TINYINT NOT NULL,
+
+    CONSTRAINT PK_fact_reviews
+        PRIMARY KEY (review_id, order_id),
+
+    CONSTRAINT FK_fact_reviews_customers
+        FOREIGN KEY (customer_key)
+        REFERENCES gold.dim_customers(customer_key),
+
+    CONSTRAINT FK_fact_reviews_creation_date
+        FOREIGN KEY (review_creation_date_key)
+        REFERENCES gold.dim_date(date_key),
+
+    CONSTRAINT FK_fact_reviews_answer_date
+        FOREIGN KEY (review_answer_date_key)
+        REFERENCES gold.dim_date(date_key),
+
+    CONSTRAINT CK_fact_reviews_score
+        CHECK (review_score BETWEEN 1 AND 5)
+);
+GO
+
+/*
+Important:
+- Composite Primary Key: review_id + order_id.
+- review_score stores ratings from 1 to 5.
+- Review creation and answer dates are separate date relationships.
+- order_id is retained for traceability.*/
+
 
 
