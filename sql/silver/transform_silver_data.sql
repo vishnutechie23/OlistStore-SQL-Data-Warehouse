@@ -561,6 +561,48 @@ SELECT
 FROM bronze.olist_order_reviews;
 
 -- Load Silver Order Reviews
+SELECT
+    COUNT_BIG(*) AS total_rows,
+    COUNT_BIG(DISTINCT review_key) AS unique_review_keys
+FROM silver.olist_order_reviews;
+
+--
+SELECT COUNT_BIG(*) AS records_to_fix
+FROM silver.olist_order_reviews
+WHERE review_comment_message IS NOT NULL
+  AND LTRIM(RTRIM(
+        REPLACE(
+            REPLACE(
+                REPLACE(
+                    REPLACE(review_comment_message, CHAR(9), ''),
+                    CHAR(10), ''
+                ),
+                CHAR(13), ''
+            ),
+            CHAR(160), ''
+        )
+      )) = '';
+
+-- load 18 rows
+UPDATE silver.olist_order_reviews
+SET review_comment_message = NULL
+WHERE review_comment_message IS NOT NULL
+  AND LTRIM(RTRIM(
+        REPLACE(
+            REPLACE(
+                REPLACE(
+                    REPLACE(review_comment_message, CHAR(9), ''),
+                    CHAR(10), ''
+                ),
+                CHAR(13), ''
+            ),
+            CHAR(160), ''
+        )
+      )) = '';
+
+SELECT @@ROWCOUNT AS rows_updated;
+
+-- Load Silver Order Reviews
 INSERT INTO silver.olist_order_reviews
 (
     review_id,
@@ -576,7 +618,21 @@ SELECT
     LTRIM(RTRIM(order_id)),
     review_score,
     NULLIF(LTRIM(RTRIM(review_comment_title)), ''),
-    NULLIF(LTRIM(RTRIM(review_comment_message)), ''),
+    NULLIF(
+        LTRIM(RTRIM(
+            REPLACE(
+                REPLACE(
+                    REPLACE(
+                        REPLACE(review_comment_message, CHAR(9), ''),
+                        CHAR(10), ''
+                    ),
+                    CHAR(13), ''
+                ),
+                CHAR(160), ''
+            )
+        )),
+        ''
+    ),
     review_creation_date,
     review_answer_timestamp
 FROM bronze.olist_order_reviews;
@@ -589,20 +645,9 @@ SELECT
     COUNT(DISTINCT review_key) AS unique_review_keys,
     COUNT(DISTINCT CONCAT(review_id, '-', order_id)) AS unique_reviews
 FROM silver.olist_order_reviews;
--- comp etl log
-EXEC audit.usp_finish_etl_log
-    @log_id = 27,
-    @rows_read = 99224,
-    @rows_inserted = 99224,
-    @rows_updated = 0,
-    @rows_rejected = 0;
+
 
 -- Silver Geolocation Transformation
-EXEC audit.usp_start_etl_log
-    @pipeline_name = 'Silver Geolocation Transformation',
-    @source_name = 'bronze.olist_geolocation',
-    @target_name = 'silver.olist_geolocation';
-
 -- Validate Bronze Geolocation
 SELECT
     COUNT(*) AS total_rows,
@@ -1077,24 +1122,51 @@ WHERE o.order_id IS NULL;
 
 
 -- NULL and blank value validation We'll check required columns across Silver tables.
-SELECT 'customers' AS table_name,
-       SUM(CASE WHEN customer_id IS NULL OR LTRIM(RTRIM(customer_id)) = '' THEN 1 ELSE 0 END) AS invalid_ids
+SELECT 'customers.customer_id' AS column_name,
+       COUNT_BIG(*) AS null_count
 FROM silver.olist_customers
+WHERE customer_id IS NULL
 
 UNION ALL
-SELECT 'orders',
-       SUM(CASE WHEN order_id IS NULL OR LTRIM(RTRIM(order_id)) = '' THEN 1 ELSE 0 END)
+SELECT 'orders.order_id', COUNT_BIG(*)
 FROM silver.olist_orders
+WHERE order_id IS NULL
 
 UNION ALL
-SELECT 'products',
-       SUM(CASE WHEN product_id IS NULL OR LTRIM(RTRIM(product_id)) = '' THEN 1 ELSE 0 END)
+SELECT 'order_items.order_id', COUNT_BIG(*)
+FROM silver.olist_order_items
+WHERE order_id IS NULL
+
+UNION ALL
+SELECT 'order_items.product_id', COUNT_BIG(*)
+FROM silver.olist_order_items
+WHERE product_id IS NULL
+
+UNION ALL
+SELECT 'order_items.seller_id', COUNT_BIG(*)
+FROM silver.olist_order_items
+WHERE seller_id IS NULL
+
+UNION ALL
+SELECT 'payments.order_id', COUNT_BIG(*)
+FROM silver.olist_order_payments
+WHERE order_id IS NULL
+
+UNION ALL
+SELECT 'reviews.order_id', COUNT_BIG(*)
+FROM silver.olist_order_reviews
+WHERE order_id IS NULL
+
+UNION ALL
+SELECT 'products.product_id', COUNT_BIG(*)
 FROM silver.olist_products
+WHERE product_id IS NULL
 
 UNION ALL
-SELECT 'sellers',
-       SUM(CASE WHEN seller_id IS NULL OR LTRIM(RTRIM(seller_id)) = '' THEN 1 ELSE 0 END)
-FROM silver.olist_sellers;
+SELECT 'sellers.seller_id', COUNT_BIG(*)
+FROM silver.olist_sellers
+WHERE seller_id IS NULL;
+
 
 -- Check transaction table IDs
 SELECT 'order_items' AS table_name,
@@ -1248,89 +1320,23 @@ WHERE order_status = 'canceled'
   ); 
 
 
-
--- Verify all Silver ETL logs
-SELECT
-    log_id,
-    pipeline_name,
-    rows_read,
-    rows_inserted,
-    rows_rejected,
-    status
-FROM audit.etl_execution_log
--- WHERE pipeline_name LIKE '%Silver%'
--- OR target_name LIKE 'silver.%'
-ORDER BY log_id;
-
--- Check Category Translation ETL log
-SELECT *
-FROM audit.etl_execution_log
-WHERE target_name LIKE '%category_translation%'
-ORDER BY log_id;
-
 -- 
 SELECT
-    log_id,
-    pipeline_name,
-    source_name,
-    target_name,
-    start_time_utc,
-    status
-FROM audit.etl_execution_log
-WHERE status = 'RUNNING'
-ORDER BY log_id;
+    COUNT_BIG(*) AS delivered_orders_missing_delivery_date
+FROM silver.olist_orders
+WHERE order_status = 'delivered'
+  AND order_delivered_customer_date IS NULL;
 
--- 
-UPDATE audit.etl_execution_log
-SET
-    status = 'FAILED',
-    end_time_utc = SYSUTCDATETIME(),
-    error_message = 'Stale RUNNING log from an earlier execution. Transformation was completed successfully under a separate log ID.'
-WHERE status = 'RUNNING'
-  AND log_id IN (
-      18, 19, 20,
-      22, 23, 24, 25,
-      28, 29, 30, 31, 32, 33, 34,
-      36, 37, 38, 39, 40, 41, 42
+-- Canceled orders mein delivery dates check karo.
+SELECT
+    COUNT_BIG(*) AS canceled_orders_with_carrier_date,
+    SUM(CASE
+        WHEN order_delivered_customer_date IS NOT NULL
+        THEN 1 ELSE 0
+    END) AS canceled_orders_with_customer_delivery_date
+FROM silver.olist_orders
+WHERE order_status = 'canceled'
+  AND (
+      order_delivered_carrier_date IS NOT NULL
+      OR order_delivered_customer_date IS NOT NULL
   );
-
-
-SELECT
-    status,
-    COUNT(*) AS total_logs
-FROM audit.etl_execution_log
-GROUP BY status
-ORDER BY status;
-
-DECLARE @log_id BIGINT;
-
--- Start ETL log
-DECLARE @result TABLE (log_id BIGINT);
-
-INSERT INTO @result
-EXEC audit.usp_start_etl_log
-    @pipeline_name = 'Silver Category Translation Transformation',
-    @source_name = 'bronze.olist_category_translation',
-    @target_name = 'silver.olist_category_translation';
-
-SELECT @log_id = log_id FROM @result;
-
--- Finish ETL log
-EXEC audit.usp_finish_etl_log
-    @log_id = @log_id,
-    @rows_read = 71,
-    @rows_inserted = 71,
-    @rows_updated = 0,
-    @rows_rejected = 0;
-
-
--- final
-SELECT
-    log_id,
-    pipeline_name,
-    rows_read,
-    rows_inserted,
-    rows_rejected,
-    status
-FROM audit.etl_execution_log
-WHERE pipeline_name = 'Silver Category Translation Transformation';
