@@ -1,0 +1,541 @@
+
+============================================================
+OLIST STORE SQL DATA WAREHOUSE
+GOLD LAYER DOCUMENTATION
+============================================================
+
+1. PROJECT OVERVIEW
+-------------------
+
+Project Name:
+Olist Store SQL Data Warehouse
+
+Database:
+OlistStore_DW
+
+Platform:
+Microsoft SQL Server 2025 Express
+
+Schema:
+gold
+
+Purpose:
+The Gold Layer is the final analytical layer of the
+data warehouse.
+
+It transforms cleaned Silver data into a dimensional
+data model optimized for business intelligence,
+analytical queries and Power BI reporting.
+
+The Gold Layer follows a Star Schema approach with
+6 Dimension Tables and 4 Fact Tables.
+
+
+2. GOLD LAYER ARCHITECTURE
+--------------------------
+
+Data Flow:
+
+Bronze Layer
+     |
+     v
+Silver Layer
+     |
+     v
+Gold Layer
+     |
+     +----------------------+
+     |                      |
+     v                      v
+Dimension Tables       Fact Tables
+     |                      |
+     +----------+-----------+
+                |
+                v
+          Star Schema
+                |
+                v
+            Power BI
+
+
+3. GOLD DIMENSION TABLES
+------------------------
+
+The Gold Layer contains 6 Dimension Tables.
+
+1. gold.dim_customers
+
+   Purpose:
+   Stores customer information for analytical reporting.
+
+   Important Columns:
+   - customer_key (Surrogate Primary Key)
+   - customer_id (Business Key)
+   - customer_unique_id
+   - customer_zip_code_prefix
+   - customer_city
+   - customer_state
+
+   Records: 99,441
+
+
+2. gold.dim_products
+
+   Purpose:
+   Stores product details and translated product categories.
+
+   Important Columns:
+   - product_key (Surrogate Primary Key)
+   - product_id (Business Key)
+   - product_category_name
+   - product_category_name_english
+   - product_name_length
+   - product_description_length
+   - product_photos_qty
+   - product_weight_g
+   - product_length_cm
+   - product_height_cm
+   - product_width_cm
+
+   Records: 32,951
+
+
+3. gold.dim_sellers
+
+   Purpose:
+   Stores seller details and location information.
+
+   Important Columns:
+   - seller_key (Surrogate Primary Key)
+   - seller_id (Business Key)
+   - seller_zip_code_prefix
+   - seller_city
+   - seller_state
+
+   Records: 3,095
+
+
+4. gold.dim_date
+
+   Purpose:
+   Provides calendar attributes for time-based analysis.
+
+   Important Columns:
+   - date_key (Primary Key)
+   - full_date
+   - day_number
+   - month_number
+   - month_name
+   - quarter_number
+   - year_number
+   - week_number
+   - day_of_week
+   - day_name
+   - is_weekend
+   - iso_year_number
+
+   Date Range:
+   2016-01-01 to 2020-04-09
+
+   Records: 1,561
+
+   Note:
+   The date dimension supports analysis across different
+   order, delivery, shipping and review dates.
+
+
+5. gold.dim_payment_type
+
+   Purpose:
+   Stores unique payment methods for payment analysis.
+
+   Important Columns:
+   - payment_type_key (Surrogate Primary Key)
+   - payment_type (Business Attribute)
+
+   Records: 5
+
+
+6. gold.dim_order_status
+
+   Purpose:
+   Stores unique order statuses for order analysis.
+
+   Important Columns:
+   - order_status_key (Surrogate Primary Key)
+   - order_status (Business Attribute)
+
+   Records: 8
+
+
+4. GOLD FACT TABLES
+-------------------
+
+The Gold Layer contains 4 Fact Tables.
+
+
+1. gold.fact_orders
+
+   Grain:
+   One row per order.
+
+   Primary Key:
+   order_id
+
+   Foreign Keys:
+   - customer_key
+   - order_status_key
+   - purchase_date_key
+   - approved_date_key
+   - delivered_carrier_date_key
+   - delivered_customer_date_key
+   - estimated_delivery_date_key
+
+   Measures and Attributes:
+   - order_count
+   - approval_hours
+   - delivery_days
+   - estimated_delivery_days
+   - delivery_delay_days
+   - is_delivered
+   - is_canceled
+
+   Records: 99,441
+
+   Purpose:
+   Supports order volume, order status, delivery performance,
+   cancellation and delivery delay analysis.
+
+
+2. gold.fact_order_items
+
+   Grain:
+   One row per order item.
+
+   Composite Primary Key:
+   order_id + order_item_id
+
+   Foreign Keys:
+   - customer_key
+   - product_key
+   - seller_key
+   - purchase_date_key
+   - shipping_limit_date_key
+
+   Measures and Attributes:
+   - item_count
+   - price
+   - freight_value
+   - item_total_value
+
+   Records: 112,650
+
+   Purpose:
+   Supports product sales, seller performance, freight
+   and item-level revenue analysis.
+
+
+3. gold.fact_payments
+
+   Grain:
+   One row per payment transaction.
+
+   Composite Primary Key:
+   order_id + payment_sequential
+
+   Foreign Keys:
+   - customer_key
+   - payment_type_key
+   - purchase_date_key
+
+   Measures and Attributes:
+   - payment_count
+   - payment_installments
+   - payment_value
+
+   Records: 103,886
+
+   Purpose:
+   Supports payment method, payment value and installment
+   analysis.
+
+
+4. gold.fact_reviews
+
+   Grain:
+   One row per review record.
+
+   Composite Primary Key:
+   review_id + order_id
+
+   Foreign Keys:
+   - customer_key
+   - review_creation_date_key
+   - review_answer_date_key
+
+   Measures and Attributes:
+   - review_count
+   - review_score
+
+   Records: 99,224
+
+   Purpose:
+   Supports customer feedback, review score and
+   review trend analysis.
+
+
+5. STAR SCHEMA RELATIONSHIPS
+----------------------------
+
+The Gold Layer follows a Star Schema design.
+
+Dimension-to-Fact Relationships:
+
+dim_customers:
+- fact_orders
+- fact_order_items
+- fact_payments
+- fact_reviews
+
+dim_products:
+- fact_order_items
+
+dim_sellers:
+- fact_order_items
+
+dim_date:
+- fact_orders
+- fact_order_items
+- fact_payments
+- fact_reviews
+
+dim_payment_type:
+- fact_payments
+
+dim_order_status:
+- fact_orders
+
+Total:
+- 6 Dimension Tables
+- 4 Fact Tables
+- 19 Foreign Key Constraints
+
+Note:
+The Date Dimension is used in multiple roles, including
+purchase date, approval date, delivery date, shipping date,
+review creation date and review answer date.
+
+The Customer Dimension is shared across all four
+Fact Tables.
+
+
+6. SURROGATE KEYS AND DATA MODELING
+-----------------------------------
+
+Surrogate Keys:
+
+The following dimensions use surrogate primary keys:
+
+- dim_customers: customer_key
+- dim_products: product_key
+- dim_sellers: seller_key
+- dim_payment_type: payment_type_key
+- dim_order_status: order_status_key
+
+The Date Dimension uses date_key as its primary key
+in YYYYMMDD format.
+
+Business keys are retained in the dimension tables
+for identification and traceability.
+
+Fact tables use business identifiers and composite
+keys according to their respective grain.
+
+
+7. GOLD DATA LOADING PROCESS
+----------------------------
+
+The Gold Layer is populated from the Silver Layer.
+
+Main processing steps:
+
+1. Create the Gold schema and dimensional tables.
+2. Load customer dimension records.
+3. Load product dimension records.
+4. Load seller dimension records.
+5. Generate and populate the date dimension.
+6. Load distinct payment types.
+7. Load distinct order statuses.
+8. Populate fact_orders.
+9. Populate fact_order_items.
+10. Populate fact_payments.
+11. Populate fact_reviews.
+12. Validate records, keys, relationships and measures.
+
+All transformations and loading operations are performed
+using SQL Server.
+
+
+8. FINAL GOLD TABLE RECORD COUNTS
+---------------------------------
+
+DIMENSION TABLES:
+
+Table                         Records
+--------------------------------------
+dim_customers                  99,441
+dim_date                        1,561
+dim_order_status                    8
+dim_payment_type                    5
+dim_products                   32,951
+dim_sellers                     3,095
+
+FACT TABLES:
+
+Table                         Records
+--------------------------------------
+fact_orders                    99,441
+fact_order_items              112,650
+fact_payments                 103,886
+fact_reviews                   99,224
+
+Total Dimension Records: 137,061
+Total Fact Records:     415,201
+Total Gold Records:     552,262
+
+
+9. FINAL GOLD DATA VALIDATION
+-----------------------------
+
+The following validation checks were performed:
+
+1. Table and Row Count Validation
+   - All 10 Gold tables were verified.
+   - Silver vs Gold source row counts matched.
+
+2. Primary Key Validation
+   - All primary and composite keys were checked.
+   - Duplicate primary-key groups: 0.
+
+3. NULL Validation
+   - NOT NULL column validation completed.
+   - Unexpected NULL values: 0.
+   - Expected NULL values in optional columns were preserved.
+
+4. Foreign Key Validation
+   - All dimension and fact relationships were checked.
+   - Unmatched records: 0.
+
+5. Date Relationship Validation
+   - All non-NULL date keys were checked against dim_date.
+   - Unmatched date records: 0.
+
+6. Fact Measure Validation
+   - Order, item, payment and review measures were checked.
+   - Item total calculation mismatches: 0.
+   - Conflicting order flags: 0.
+   - Invalid review scores: 0.
+
+7. Dimension Business Key Validation
+   - Customer, product, seller, payment type and
+     order status business keys were checked.
+   - Duplicate business key groups: 0.
+
+
+10. FINAL BUSINESS METRICS
+--------------------------
+
+Order Analysis:
+- Total Orders: 99,441
+- Delivered Orders: 96,478
+- Canceled Orders: 625
+- Orders with Delivery Metrics: 96,476
+
+Product and Sales Analysis:
+- Total Order Items: 112,650
+- Product Price Total: 13,591,643.70
+- Freight Total: 2,251,909.54
+- Item Total Value: 15,843,553.24
+
+Payment Analysis:
+- Total Payment Records: 103,886
+- Total Payment Value: 16,008,872.12
+- Total Installments: 296,423
+
+Review Analysis:
+- Total Reviews: 99,224
+- Total Review Score: 405,471
+- Average Review Score: 4.086420
+- Minimum Review Score: 1
+- Maximum Review Score: 5
+
+
+11. TECHNOLOGIES USED
+---------------------
+
+- Microsoft SQL Server 2025 Express
+- SQL Server Management Studio (SSMS)
+- SQL Server SQL
+- Visual Studio Code
+- Power BI (Next Stage)
+
+SQL Server is used for dimensional modeling,
+data loading and final validation.
+
+
+12. GOLD LAYER OUTPUT
+---------------------
+
+The Gold Layer successfully transforms cleaned Silver
+data into an analytical Star Schema.
+
+Database:
+OlistStore_DW
+
+Schema:
+gold
+
+Dimension Tables: 6
+Fact Tables: 4
+Total Tables: 10
+Foreign Key Constraints: 19
+Total Gold Records: 552,262
+
+The Gold Layer is ready for business intelligence
+and analytical reporting.
+
+
+13. NEXT STAGE: POWER BI
+------------------------
+
+The next stage is to connect Power BI to the Gold Layer.
+
+Planned dashboard pages:
+
+1. Executive Overview
+   - Revenue and order KPIs
+   - Monthly sales trends
+   - Order performance
+
+2. Product and Seller Analysis
+   - Product category performance
+   - Top products and sellers
+   - Price and freight analysis
+
+3. Order and Delivery Analysis
+   - Order status distribution
+   - Delivery duration
+   - Delivery delay and cancellation analysis
+
+4. Payment and Review Analysis
+   - Payment method distribution
+   - Payment value and installments
+   - Customer review scores
+
+Power BI will use the Gold Layer as its primary
+analytical data source.
+
+
+============================================================
+END OF GOLD LAYER DOCUMENTATION
+============================================================
