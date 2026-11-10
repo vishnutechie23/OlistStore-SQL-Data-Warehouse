@@ -119,6 +119,74 @@ SELECT
         THEN 1 ELSE 0 END)
 FROM silver.olist_order_reviews;
 
+--
+SELECT
+    SUM(CASE
+        WHEN b.review_comment_message IS NULL
+         AND s.review_comment_message IS NOT NULL
+        THEN 1 ELSE 0
+    END) AS bronze_null_silver_not_null,
+
+    SUM(CASE
+        WHEN b.review_comment_message IS NOT NULL
+         AND s.review_comment_message IS NULL
+        THEN 1 ELSE 0
+    END) AS bronze_not_null_silver_null
+
+FROM bronze.olist_order_reviews b
+INNER JOIN silver.olist_order_reviews s
+    ON b.review_id = s.review_id
+   AND b.order_id = s.order_id;
+
+--18 records inspect karo:
+SELECT
+    b.review_id,
+    b.order_id,
+    b.review_comment_message AS bronze_message,
+    s.review_comment_message AS silver_message
+FROM bronze.olist_order_reviews b
+INNER JOIN silver.olist_order_reviews s
+    ON b.review_id = s.review_id
+   AND b.order_id = s.order_id
+WHERE b.review_comment_message IS NULL
+  AND s.review_comment_message IS NOT NULL;
+
+--
+SELECT
+    review_id,
+    CASE
+        WHEN review_comment_message IS NULL THEN 'NULL'
+        WHEN LTRIM(RTRIM(review_comment_message)) = '' THEN 'BLANK'
+        ELSE 'HAS VALUE'
+    END AS value_status,
+    LEN(review_comment_message) AS value_length,
+    DATALENGTH(review_comment_message) AS storage_bytes,
+    '[' + review_comment_message + ']' AS inspected_value
+FROM silver.olist_order_reviews
+WHERE review_id IN (
+    '007c08c01178c42ff829560cc24dd0d6',
+    '00b385c367ca681c5800956f540f62b8',
+    '052150c42f7cc01bad8bd1b3d760f2df'
+);
+
+--
+SELECT COUNT_BIG(*) AS whitespace_only_messages
+FROM silver.olist_order_reviews
+WHERE review_comment_message IS NOT NULL
+  AND LTRIM(RTRIM(
+        REPLACE(
+            REPLACE(
+                REPLACE(
+                    REPLACE(review_comment_message, CHAR(9), ''),
+                    CHAR(10), ''
+                ),
+                CHAR(13), ''
+            ),
+            CHAR(160), ''
+        )
+      )) = '';
+
+
 -- Products table comparison Products mein category translation aur column renaming hua tha.
 SELECT
     b.product_category_name AS bronze_category,
@@ -135,3 +203,118 @@ GROUP BY
     s.product_category_name,
     s.product_category_name_english
 ORDER BY product_count DESC;
+
+/*
+Silver layer status
+Ab tak:
+- [x] Row count comparison
+- [x] Customer schema comparison
+- [x] Reviews cleaning comparison and correction
+- [x] Product category translation comparison
+- [x] Row counts, NULL, numeric, FK and date validations
+*/
+
+-- Duplicate Primary / Composite Keys
+-- =============================================
+-- FINAL VALIDATION: DUPLICATE KEYS IN SILVER
+-- =============================================
+
+SELECT 'customers' AS table_name,
+       'customer_id' AS key_columns,
+       COUNT_BIG(*) AS duplicate_groups
+FROM (
+    SELECT customer_id
+    FROM silver.olist_customers
+    GROUP BY customer_id
+    HAVING COUNT(*) > 1
+) AS d
+
+UNION ALL
+
+SELECT 'orders', 'order_id', COUNT_BIG(*)
+FROM (
+    SELECT order_id
+    FROM silver.olist_orders
+    GROUP BY order_id
+    HAVING COUNT(*) > 1
+) AS d
+
+UNION ALL
+
+SELECT 'products', 'product_id', COUNT_BIG(*)
+FROM (
+    SELECT product_id
+    FROM silver.olist_products
+    GROUP BY product_id
+    HAVING COUNT(*) > 1
+) AS d
+
+UNION ALL
+
+SELECT 'sellers', 'seller_id', COUNT_BIG(*)
+FROM (
+    SELECT seller_id
+    FROM silver.olist_sellers
+    GROUP BY seller_id
+    HAVING COUNT(*) > 1
+) AS d
+
+UNION ALL
+
+SELECT 'order_items', 'order_id + order_item_id', COUNT_BIG(*)
+FROM (
+    SELECT order_id, order_item_id
+    FROM silver.olist_order_items
+    GROUP BY order_id, order_item_id
+    HAVING COUNT(*) > 1
+) AS d
+
+UNION ALL
+
+SELECT 'order_payments', 'order_id + payment_sequential', COUNT_BIG(*)
+FROM (
+    SELECT order_id, payment_sequential
+    FROM silver.olist_order_payments
+    GROUP BY order_id, payment_sequential
+    HAVING COUNT(*) > 1
+) AS d
+
+UNION ALL
+
+SELECT 'order_reviews', 'review_id + order_id', COUNT_BIG(*)
+FROM (
+    SELECT review_id, order_id
+    FROM silver.olist_order_reviews
+    GROUP BY review_id, order_id
+    HAVING COUNT(*) > 1
+) AS d
+
+UNION ALL
+
+SELECT 'order_reviews', 'review_key', COUNT_BIG(*)
+FROM (
+    SELECT review_key
+    FROM silver.olist_order_reviews
+    GROUP BY review_key
+    HAVING COUNT(*) > 1
+) AS d
+
+UNION ALL
+
+SELECT 'geolocation', 'geolocation_key', COUNT_BIG(*)
+FROM (
+    SELECT geolocation_key
+    FROM silver.olist_geolocation
+    GROUP BY geolocation_key
+    HAVING COUNT(*) > 1
+) AS d
+
+UNION ALL
+
+SELECT 'category_translation', 'product_category_name', COUNT_BIG(*)
+FROM (
+    SELECT product_category_name
+    FROM silver.olist_category_translation
+    GROUP BY product_category_name
+    HAVING COUNT(*) > 1
+) AS d;
