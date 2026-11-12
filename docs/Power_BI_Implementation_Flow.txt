@@ -1,0 +1,307 @@
+OLIST STORE SQL DATA WAREHOUSE POWER BI IMPLEMENTATION FLOW
+================================
+
+Project: Olist Store SQL Data Warehouse Database: OlistStore_DW SQL
+Server instance: localhost Tool: Microsoft Power BI Desktop Connection
+mode: Import Authentication: Windows Authentication
+
+PURPOSE
+
+This document records the Power BI implementation process from
+connecting SQL Server to Power BI through data loading, Power Query
+preparation, data modelling, DAX measures, report development,
+validation and GitHub documentation.
+
+IMPORTANT PROJECT SCOPE
+
+-   Bronze, Silver and Gold layers were built and validated in SQL
+    Server.
+-   Power BI uses only the 10 Gold tables.
+-   Bronze and Silver tables are not imported into the Power BI model.
+-   SQL Server remains the main data warehouse and transformation layer.
+-   Power Query is being used only for light reporting-side preparation,
+    such as removing automatically generated navigation columns and
+    verifying data types.
+-   Do not repeat or rebuild SQL ETL transformations in Power Query.
+-   Do not modify the source Gold tables from Power BI.
+
+  -------------------------------------------
+  1. CONNECT POWER BI DESKTOP TO SQL SERVER
+  -------------------------------------------
+
+Steps: 1. Open Power BI Desktop. 2. Select Home > Get data > SQL Server.
+3. Enter the SQL Server instance: localhost. Enter the database:
+OlistStore_DW 5. Select the Import data connectivity mode. 6. Click OK /
+Connect. 7. Select Windows authentication. 8. A connection encryption
+warning appeared: Power BI could not connect using an encrypted
+connection. The unencrypted connection option was accepted to continue.
+9. Connect to the database.
+
+Connection details: - Server: localhost - Database: OlistStore_DW -
+Authentication: Windows - Mode: Import
+
+  ------------------------------------
+  2. SELECT GOLD TABLES IN NAVIGATOR
+  ------------------------------------
+
+In the Navigator window, search/filter for “gold” and select ONLY the
+following 10 tables:
+
+DIMENSION TABLES (6) 1. gold.dim_customers 2. gold.dim_date 3.
+gold.dim_order_status 4. gold.dim_payment_type 5. gold.dim_products 6.
+gold.dim_sellers
+
+FACT TABLES (4) 7. gold.fact_order_items 8. gold.fact_orders 9.
+gold.fact_payments 10. gold.fact_reviews
+
+Do not select Bronze or Silver tables. Do not select unrelated test
+tables.
+
+After selecting all 10 Gold tables, click Load.
+
+  ---------------------------------------
+  3. HANDLE THE SQL SERVER MEMORY ERROR
+  ---------------------------------------
+
+During the first load attempt, Power BI showed this error:
+
+“Microsoft SQL: There is insufficient memory available in the buffer
+pool.”
+
+The load failed for the Gold tables.
+
+Action taken: 1. Opened File > Options and settings > Options. 2. Opened
+Global > Data Load. 3. Located “Parallel loading of tables”. 4. Reduced
+the maximum number of simultaneous evaluations. 5. The value 1 was
+rejected because Power BI requires a value between 2 and 30. A valid
+lower value was then used. 6. Confirmed the Options window and retried
+the load.
+
+This setting reduces the number of table queries evaluated at the same
+time. It does not change the SQL Server source data.
+
+Note: If the same error returns, avoid repeatedly refreshing all tables.
+Check available system memory and SQL Server memory usage first.
+
+  -------------------------------------
+  4. VERIFY THAT ALL 10 TABLES LOADED
+  -------------------------------------
+
+After the load completed, the Data pane showed all 10 Gold tables.
+
+The following row counts were checked against the SQL Server Gold table
+counts:
+
+DIMENSIONS Table Expected / Loaded Rows —————————————————-
+gold.dim_customers 99,441 gold.dim_date 1,561 gold.dim_order_status 8
+gold.dim_payment_type 5 gold.dim_products 32,951 gold.dim_sellers 3,095
+
+FACTS Table Expected / Loaded Rows —————————————————-
+gold.fact_order_items 112,650 gold.fact_orders 99,441 gold.fact_payments
+103,886 gold.fact_reviews 99,224
+
+Verification result: - All 10 table counts matched the SQL Server Gold
+counts. - Total dimension rows: 137,061 - Total fact rows: 415,201 -
+Total rows across all 10 Gold tables: 552,262
+
+The total is the sum of rows across tables. It is not a count of unique
+customers, orders or business entities.
+
+  ----------------------------
+  5. OPEN POWER QUERY EDITOR
+  ----------------------------
+
+Steps: 1. In Power BI Desktop, select Home > Transform data. 2. Power
+Query Editor opens. 3. The Queries pane should contain 10 queries,
+corresponding to the 10 Gold tables.
+
+Current review approach: - Check each table one at a time. - Inspect the
+actual SQL columns. - Check the data types. - Remove only automatically
+generated related-table navigation columns if they appear. - Do not
+expand these navigation columns. - Do not remove actual SQL data
+columns. - Do not make unnecessary transformations.
+
+  -------------------------------------------
+  6. POWER QUERY CLEANUP - CURRENT PROGRESS
+  -------------------------------------------
+
+TABLE: gold.dim_customers
+
+The preview showed 10 columns in total.
+
+Actual customer columns include: - customer_key - customer_id -
+customer_unique_id - customer_zip_code_prefix - customer_city -
+customer_state
+
+The preview also showed four automatically generated related-table
+navigation columns: - gold.fact_order_items - gold.fact_orders -
+gold.fact_payments - gold.fact_reviews
+
+These are Power Query navigation columns, not physical columns from the
+Gold SQL table.
+
+Action planned: - Remove the four navigation columns. - Retain all
+actual customer columns. - Do not expand the navigation columns.
+
+Data type observations from the visible preview: - customer_key: Whole
+Number - customer_id: Text - customer_unique_id: Text -
+customer_zip_code_prefix: Text - customer_city: Text - customer_state:
+Text
+
+Keeping customer_zip_code_prefix as Text preserves leading zeros.
+
+Status: - Power Query review has started. - Removal of the four customer
+navigation columns is pending confirmation. - The remaining 9 tables
+still need to be reviewed.
+
+For each remaining table: 1. Select the query. 2. Inspect all columns,
+including columns to the right. 3. Identify automatically generated
+columns named like gold.dim_* or gold.fact_*. 4. Remove only those
+navigation columns. 5. Verify actual column data types. 6. Keep keys and
+identifiers in suitable types. 7. Preserve ZIP/postal codes as Text
+where applicable. 8. Keep date fields as Date or Date/Time according to
+their source meaning. 9. Keep numeric measures as appropriate numeric
+types. 10. Avoid changing source values without a clear reason.
+
+  ------------------------------
+  7. APPLY POWER QUERY CHANGES
+  ------------------------------
+
+After reviewing all 10 queries: 1. Check the Applied Steps pane for each
+query. 2. Confirm that only intended cleanup steps were added. 3.
+Confirm no actual Gold columns were accidentally removed. 4. Select
+Home > Close & Apply. 5. Wait for Power BI to apply the changes.
+
+After applying: - Confirm all 10 tables remain in the Data pane. - Check
+for query errors. - Recheck important row counts if needed.
+
+  --------------------------
+  8. REVIEW THE DATA MODEL
+  --------------------------
+
+The Power BI Model view displayed the 10 Gold tables and their
+relationships.
+
+Model structure: - 6 dimension tables - 4 fact tables - Shared customer
+dimension - Product and seller dimensions connected to order items -
+Payment type dimension connected to payments - Order status dimension
+connected to orders - Date dimension connected to fact tables through
+date keys
+
+The Gold SQL model contains 19 foreign key constraints.
+
+Important date relationship note: The date dimension is used for
+multiple date roles. In Power BI, one relationship between the same
+tables can be active while other date relationships are inactive. Dotted
+relationship lines indicate inactive relationships.
+
+Do not change relationships blindly. Review relationship columns,
+cardinality and filter direction before making any changes.
+
+  ------------------------
+  9. CREATE DAX MEASURES
+  ------------------------
+
+Planned measures for the report:
+
+Order measures: - Total Orders - Delivered Orders - Canceled Orders -
+Cancellation Rate
+
+Sales and item measures: - Total Item Value - Total Product Price -
+Total Freight Value - Total Items
+
+Payment measures: - Total Payment Value - Total Payments - Total
+Installments
+
+Review measures: - Total Reviews - Average Review Score
+
+Delivery measures: - Average Delivery Days - Average Delivery Delay
+
+Important: - fact_order_items[item_total_value] and
+fact_payments[payment_value] are different measures. - Do not treat them
+as identical revenue figures. - Define each measure according to its
+business meaning. - Use explicit DAX measures instead of relying on
+implicit sums for important report KPIs.
+
+DAX measure creation and validation are pending.
+
+  ------------------------
+  10. BUILD REPORT PAGES
+  ------------------------
+
+Planned report: 4 pages.
+
+PAGE 1 - EXECUTIVE OVERVIEW Possible visuals: - Total Orders KPI - Total
+Item Value KPI - Delivered Orders KPI - Cancellation Rate KPI - Average
+Review Score KPI - Monthly order / sales trend - Order status overview
+
+PAGE 2 - PRODUCT & SELLER ANALYSIS Possible visuals: - Top product
+categories - Product performance - Top sellers - Item value by
+category - Freight value analysis
+
+PAGE 3 - ORDER & DELIVERY ANALYSIS Possible visuals: - Orders by
+status - Delivery duration - Delivery delay analysis - Estimated vs
+actual delivery - Monthly order trends
+
+PAGE 4 - PAYMENT & REVIEW ANALYSIS Possible visuals: - Payment value by
+payment type - Payment method distribution - Installment analysis -
+Review score distribution - Average review score trends
+
+Report visuals, slicers, formatting and interactions are pending.
+
+  ----------------------
+  11. FINAL VALIDATION
+  ----------------------
+
+Before considering the Power BI report complete:
+
+1.  Confirm all 10 Gold tables are present.
+2.  Confirm important row counts.
+3.  Check query errors.
+4.  Check model relationships.
+5.  Validate DAX measures against SQL Server results.
+6.  Check date filtering and inactive date relationships.
+7.  Test slicers and cross-filtering.
+8.  Check totals after applying filters.
+9.  Confirm that no Bronze or Silver tables were imported.
+10. Save the Power BI report as a .pbix file.
+
+  ---------------------------------------------
+  12. GITHUB DOCUMENTATION AND PROJECT OUTPUT
+  ---------------------------------------------
+
+Suggested project files: - Power BI report (.pbix) - Power BI report
+screenshots - Power BI implementation flow document - Power BI report
+insights / findings document - Updated main README.md
+
+Suggested documentation: - SQL Server connection details (do not include
+passwords) - 10 Gold tables and their row counts - Power Query
+transformations actually performed - Data model and relationship
+explanation - DAX measures and their definitions - Report page
+descriptions - Key business insights - Validation results
+
+Do not document a transformation as completed until it has actually been
+applied and checked.
+
+  ------------------------
+  CURRENT PROJECT STATUS
+  ------------------------
+
+COMPLETED - SQL Server connection established. - OlistStore_DW
+selected. - Only 10 Gold tables selected in Navigator. - Memory-related
+load issue addressed by reducing parallel table evaluations. - All 10
+Gold tables loaded into Power BI. - All 10 row counts checked and
+matched SQL Server. - Power Query Editor opened. - Initial review of
+gold.dim_customers started. - Power BI Model view displayed all 10
+tables and relationships.
+
+IN PROGRESS - Power Query review and light cleanup of all 10 tables. -
+Removal of automatically generated navigation columns, where present. -
+Data type verification.
+
+PENDING - Close & Apply after Power Query review. - Final model
+relationship review. - DAX measures. - Four report pages. - Report
+validation against SQL Server. - Save .pbix file. - GitHub screenshots
+and final documentation.
+
+END OF DOCUMENT
