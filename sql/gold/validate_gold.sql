@@ -266,6 +266,7 @@ FROM (
 
 -- 5 : Gold NULL Value Validation
 
+-- DECLARE @sql NVARCHAR(MAX);
 DECLARE @sql NVARCHAR(MAX);
 
 SELECT @sql = STRING_AGG(
@@ -301,7 +302,7 @@ optional delivery dates and product attributes may legitimately contain NULL val
 */
 
 -- 5C: Validate NULLs in NOT NULL Columns
-DECLARE @sql NVARCHAR(MAX);
+-- DECLARE @sql NVARCHAR(MAX);
 
 SELECT @sql = STRING_AGG(
     CAST(

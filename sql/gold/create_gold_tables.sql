@@ -31,6 +31,10 @@ CREATE TABLE gold.dim_customers
 );
 GO
 
+ALTER TABLE gold.dim_customers
+ADD CONSTRAINT UQ_dim_customers_customer_id
+UNIQUE (customer_id);
+
 -- Validate dim_customers structure 
 SELECT
     COLUMN_NAME,
@@ -209,7 +213,7 @@ ORDER BY ORDINAL_POSITION;
 
 
 
--- 08_TABLE : Create gold.fact_orders
+-- 08_TABLE : Create gold.fact_order_items
 -- Grain: One row per order item line (order_id + order_item_id)
 CREATE TABLE gold.fact_order_items
 (
@@ -303,7 +307,7 @@ GO
 
 
 
--- 10_TABLE : Create tableGrain: One row per review record.
+-- 10_TABLE : Create fact_reviews One row per review record.
 CREATE TABLE gold.fact_reviews
 (
     review_id VARCHAR(50) NOT NULL,
