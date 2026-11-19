@@ -90,7 +90,25 @@ The Power BI dashboard contains four main analytical pages:
 3. **Order & Delivery Analysis** – Delivery performance, delivery time and on-time delivery.
 4. **Payment & Customer Review Insights** – Payment methods and customer review analysis.
 
-Additional dashboard features:
+### Dashboard Screenshots
+
+**1. Executive Overview**
+
+![Executive Overview](docs/Dashboard_screenshots/Executive_Overview.png)
+
+**2. Product & Seller Analysis**
+
+![Product & Seller Analysis](docs/Dashboard_screenshots/Product_Seller_Analysis.png)
+
+**3. Order & Delivery Analysis**
+
+![Order & Delivery Analysis](docs/Dashboard_screenshots/Order_Delivery_Analysis.png)
+
+**4. Payment & Customer Review Insights**
+
+![Payment & Customer Review Insights](docs/Dashboard_screenshots/Payment_Customer_Reviews.png)
+
+### Additional Dashboard Features
 
 - Interactive slicers
 - Drill-through analysis
@@ -132,7 +150,13 @@ OlistStore-SQL-Data-Warehouse/
 |   |-- .gitkeep
 |
 |-- docs/
-|   |-- BRONZE_ER_DIAGRAM.md
+|   |-- Dashboard_screenshots/
+|   |   |-- Executive_Overview.png
+|   |   |-- Product_Seller_Analysis.png
+|   |   |-- Order_Delivery_Analysis.png
+|   |   |-- Payment_Customer_Reviews.png
+|   |
+|   |-- BRONZE_ER_DIAGRAM.png
 |   |-- GOLD_ER_DIAGRAM.png
 |   |-- PROJECT_DOCUMENTATION.txt
 |   |-- Power_BI_Implementation_Flow.txt
@@ -147,12 +171,28 @@ OlistStore-SQL-Data-Warehouse/
 |
 |-- sql/
 |   |-- bronze/
+|   |   |-- CreateDatabase_schemas.sql
+|   |   |-- create_bronze_tables.sql
+|   |   |-- identify_bronze_relationships.sql
+|   |   |-- load_bronze_tables.sql
+|   |   |-- validate_bronze_data.sql
+|   |   |-- verify_bronze_loads.sql
+|   |
 |   |-- silver/
+|   |   |-- compare_bronze_vs_silver.sql
+|   |   |-- create_silver_tables.sql
+|   |   |-- transform_silver_data.sql
+|   |
 |   |-- gold/
+|       |-- create_gold_tables.sql
+|       |-- gold_analysis_queries.sql
+|       |-- gold_business_queries.sql
+|       |-- load_gold_dimensions.sql
+|       |-- load_gold_facts.sql
+|       |-- validate_gold.sql
 |
-|-- Flow.txt
-|-- README.md
 |-- .gitignore
+|-- README.md
 ```
 
 ## How to Run the Project
@@ -169,7 +209,7 @@ OlistStore-SQL-Data-Warehouse/
 10. Open `powerbi/Dashboard.pbix` in Power BI Desktop.
 11. Configure the SQL Server connection to your local data warehouse and refresh the report.
 
-Refer to `Flow.txt` and `docs/PROJECT_DOCUMENTATION.txt` for additional implementation details.
+Refer to `docs/PROJECT_DOCUMENTATION.txt` and `docs/Power_BI_Implementation_Flow.txt` for additional implementation details.
 
 ## Project Status
 
