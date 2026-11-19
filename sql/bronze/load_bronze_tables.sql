@@ -3,26 +3,12 @@
 ========================================================
  OLIST STORE - BRONZE LAYER DATA LOADING
  Database: OlistStore_DW
- Purpose: Load raw CSV/TSV datasets into Bronze tables
+ Purpose: Load raw CSV datasets into Bronze tables
 ========================================================
 */
 
--- Start 
-SELECT
-    IS_SRVROLEMEMBER('bulkadmin') AS is_bulkadmin;
-
--- check file access >
-SELECT *
-FROM OPENROWSET(
-    BULK 'C:\OlistStore-SQL-Data-Warehouse\dataset\olist_customers_dataset.csv',
-    SINGLE_CLOB
-) AS csv_file;
-
-SELECT *
-FROM OPENROWSET(
-    BULK 'C:\OlistStore-SQL-Data-Warehouse\dataset\olist_customers_dataset.csv',
-    SINGLE_CLOB
-) AS csv_file;
+-- Check BULK INSERT permission
+SELECT IS_SRVROLEMEMBER('bulkadmin') AS is_bulkadmin;
 
 USE OlistStore_DW;
 GO
@@ -39,7 +25,6 @@ SET XACT_ABORT ON;
 BEGIN TRY
     BEGIN TRANSACTION;
 
-    -- Remove existing data before reloading
     TRUNCATE TABLE bronze.olist_customers;
 
     BULK INSERT bronze.olist_customers
@@ -60,7 +45,6 @@ BEGIN TRY
     SELECT @rows = COUNT(*)
     FROM bronze.olist_customers;
 
-    -- Validate expected row count
     IF @rows <> 99441
         THROW 50001, 'Customer row count mismatch!', 1;
 
@@ -71,9 +55,7 @@ BEGIN TRY
 
 END TRY
 BEGIN CATCH
-    IF @@TRANCOUNT > 0
-        ROLLBACK TRANSACTION;
-
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
     THROW;
 END CATCH;
 GO
@@ -121,9 +103,7 @@ BEGIN TRY
 
 END TRY
 BEGIN CATCH
-    IF @@TRANCOUNT > 0
-        ROLLBACK TRANSACTION;
-
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
     THROW;
 END CATCH;
 GO
@@ -171,9 +151,7 @@ BEGIN TRY
 
 END TRY
 BEGIN CATCH
-    IF @@TRANCOUNT > 0
-        ROLLBACK TRANSACTION;
-
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
     THROW;
 END CATCH;
 GO
@@ -221,9 +199,7 @@ BEGIN TRY
 
 END TRY
 BEGIN CATCH
-    IF @@TRANCOUNT > 0
-        ROLLBACK TRANSACTION;
-
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
     THROW;
 END CATCH;
 GO
@@ -231,87 +207,15 @@ GO
 
 /*
 ========================================================
- 5. REVIEWS - CREATE STAGING TABLE
- Purpose:
- - Temporary raw landing area for normalized review data.
- - Store incoming TSV values as NVARCHAR.
- - Conditional creation prevents table-exists errors.
-========================================================
-*/
-
-IF OBJECT_ID('dbo.review_bulk_test', 'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.review_bulk_test
-    (
-        review_id NVARCHAR(100),
-        order_id NVARCHAR(100),
-        review_score NVARCHAR(20),
-        review_comment_title NVARCHAR(500),
-        review_comment_message NVARCHAR(1000),
-        review_creation_date NVARCHAR(50),
-        review_answer_timestamp NVARCHAR(50)
-    );
-
-    PRINT 'Reviews staging table created successfully!';
-END
-ELSE
-BEGIN
-    PRINT 'Reviews staging table already exists!';
-END;
-GO
-
-
-/*
-========================================================
- 6. REVIEWS - LOAD TSV INTO STAGING TABLE
- Source: olist_order_reviews_normalized.tsv
-
- Why TSV?
- Original review CSV has multiline/formatting issues.
- PowerShell normalized it into one record per line.
- Tab delimiter avoids conflicts with commas in comments.
-========================================================
-*/
-
--- Clear previous staging data before every reload
-TRUNCATE TABLE dbo.review_bulk_test;
-
--- Load normalized TSV into staging
-BULK INSERT dbo.review_bulk_test
-FROM 'C:\OlistStore-SQL-Data-Warehouse\dataset\olist_order_reviews_normalized.tsv'
-WITH
-(
-    FIELDTERMINATOR = '0x09',  -- Tab delimiter
-    ROWTERMINATOR = '0x0a',
-    CODEPAGE = '65001',
-    TABLOCK
-);
-
--- Validate staging row count
-DECLARE @staging_rows INT;
-
-SELECT @staging_rows = COUNT(*)
-FROM dbo.review_bulk_test;
-
-IF @staging_rows <> 99224
-    THROW 50001, 'Reviews staging row count mismatch!', 1;
-
-PRINT 'Reviews staging loaded successfully!';
-PRINT 'Staging rows: ' + CAST(@staging_rows AS VARCHAR(20));
-GO
-
-
-/*
-========================================================
- 7. REVIEWS - TRANSFORM AND LOAD INTO BRONZE
- Source: dbo.review_bulk_test
+ 5. LOAD REVIEWS
+ Source: olist_order_reviews_dataset.csv
  Target: bronze.olist_order_reviews
 
- Transformations:
- - Convert review_score into INT.
- - Convert empty comment fields into NULL.
- - Remove CHAR(13) carriage return from date fields.
- - Convert date strings into DATETIME2.
+ Direct CSV loading:
+ - SQL Server handles quoted fields and embedded line breaks.
+ - Review comments are preserved as NVARCHAR(MAX).
+ - Empty fields are loaded as NULL.
+ - Dates and scores are loaded directly into target types.
 ========================================================
 */
 
@@ -322,31 +226,18 @@ BEGIN TRY
 
     TRUNCATE TABLE bronze.olist_order_reviews;
 
-    INSERT INTO bronze.olist_order_reviews
+    BULK INSERT bronze.olist_order_reviews
+    FROM 'C:\OlistStore-SQL-Data-Warehouse\dataset\olist_order_reviews_dataset.csv'
+    WITH
     (
-        review_id,
-        order_id,
-        review_score,
-        review_comment_title,
-        review_comment_message,
-        review_creation_date,
-        review_answer_timestamp
-    )
-    SELECT
-        review_id,
-        order_id,
-        CONVERT(INT, NULLIF(review_score, '')),
-        NULLIF(review_comment_title, ''),
-        NULLIF(review_comment_message, ''),
-        TRY_CONVERT(
-            DATETIME2(0),
-            NULLIF(REPLACE(review_creation_date, CHAR(13), ''), '')
-        ),
-        TRY_CONVERT(
-            DATETIME2(0),
-            NULLIF(REPLACE(review_answer_timestamp, CHAR(13), ''), '')
-        )
-    FROM dbo.review_bulk_test;
+        FORMAT = 'CSV',
+        FIRSTROW = 2,
+        FIELDQUOTE = '"',
+        FIELDTERMINATOR = ',',
+        ROWTERMINATOR = '0x0d0a',
+        CODEPAGE = '65001',
+        TABLOCK
+    );
 
     DECLARE @rows INT;
 
@@ -354,7 +245,7 @@ BEGIN TRY
     FROM bronze.olist_order_reviews;
 
     IF @rows <> 99224
-        THROW 50001, 'Reviews Bronze row count mismatch!', 1;
+        THROW 50001, 'Reviews row count mismatch!', 1;
 
     COMMIT TRANSACTION;
 
@@ -363,9 +254,7 @@ BEGIN TRY
 
 END TRY
 BEGIN CATCH
-    IF @@TRANCOUNT > 0
-        ROLLBACK TRANSACTION;
-
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
     THROW;
 END CATCH;
 GO
@@ -373,7 +262,7 @@ GO
 
 /*
 ========================================================
- 8. LOAD PRODUCTS
+ 6. LOAD PRODUCTS
  Source: olist_products_dataset.csv
 ========================================================
 */
@@ -413,9 +302,7 @@ BEGIN TRY
 
 END TRY
 BEGIN CATCH
-    IF @@TRANCOUNT > 0
-        ROLLBACK TRANSACTION;
-
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
     THROW;
 END CATCH;
 GO
@@ -423,7 +310,7 @@ GO
 
 /*
 ========================================================
- 9. LOAD SELLERS
+ 7. LOAD SELLERS
  Source: olist_sellers_dataset.csv
 ========================================================
 */
@@ -463,9 +350,7 @@ BEGIN TRY
 
 END TRY
 BEGIN CATCH
-    IF @@TRANCOUNT > 0
-        ROLLBACK TRANSACTION;
-
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
     THROW;
 END CATCH;
 GO
@@ -473,7 +358,7 @@ GO
 
 /*
 ========================================================
- 10. LOAD GEOLOCATION
+ 8. LOAD GEOLOCATION
  Source: olist_geolocation_dataset.csv
 ========================================================
 */
@@ -513,9 +398,7 @@ BEGIN TRY
 
 END TRY
 BEGIN CATCH
-    IF @@TRANCOUNT > 0
-        ROLLBACK TRANSACTION;
-
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
     THROW;
 END CATCH;
 GO
@@ -523,7 +406,7 @@ GO
 
 /*
 ========================================================
- 11. LOAD CATEGORY TRANSLATION
+ 9. LOAD CATEGORY TRANSLATION
  Source: product_category_name_translation.csv
 ========================================================
 */
@@ -563,30 +446,9 @@ BEGIN TRY
 
 END TRY
 BEGIN CATCH
-    IF @@TRANCOUNT > 0
-        ROLLBACK TRANSACTION;
-
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
     THROW;
 END CATCH;
 GO
 
-/*
-Original Reviews CSV
 
-PowerShell normalization ke through TSV file bani
-
-
-Normalized TSV
-
-olist_order_reviews_normalized.tsv
-
-
-Staging Table
-
-dbo.review_bulk_test — raw NVARCHAR values
-
-
-Bronze Reviews Table
-99,224 rows
-Converted dates, integer score, cleaned empty values
-*/
