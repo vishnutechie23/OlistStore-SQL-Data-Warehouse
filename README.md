@@ -15,7 +15,7 @@ The final Gold layer follows a Star Schema design and contains fact and dimensio
 - Build a structured SQL Data Warehouse using SQL Server.
 - Implement Bronze, Silver, and Gold data layers.
 - Perform data cleaning and transformations using T-SQL.
-- Design fact and dimension tables using Star Schema.
+- Design fact and dimension tables using a Star Schema.
 - Implement data quality checks and validation.
 - Perform business analysis using SQL queries.
 - Develop interactive Power BI dashboards.
@@ -27,8 +27,7 @@ The final Gold layer follows a Star Schema design and contains fact and dimensio
 | Microsoft SQL Server | Data warehouse |
 | T-SQL | Data loading, transformation and analysis |
 | Microsoft Power BI | Data visualization and reporting |
-| Python | Supporting data profiling and preparation |
-| PowerShell | Dataset preparation |
+| Python | Supporting data profiling and exploration |
 | Git & GitHub | Version control and project management |
 
 ## Data Warehouse Architecture
@@ -36,30 +35,30 @@ The final Gold layer follows a Star Schema design and contains fact and dimensio
 The project follows the Medallion Architecture.
 
 ```text
-             Olist CSV Dataset
-                    |
-                    v
-             BRONZE LAYER
-               Raw Data
-                    |
-                    v
-             SILVER LAYER
-         Cleaned & Transformed Data
-                    |
-                    v
-              GOLD LAYER
-          Fact & Dimension Tables
-              (Star Schema)
-                    |
-                    v
-                POWER BI
-          Interactive Dashboards
+              Olist CSV Dataset
+                     |
+                     v
+               BRONZE LAYER
+                  Raw Data
+                     |
+                     v
+               SILVER LAYER
+          Cleaned & Transformed Data
+                     |
+                     v
+                GOLD LAYER
+           Fact & Dimension Tables
+                (Star Schema)
+                     |
+                     v
+                 POWER BI
+           Interactive Dashboards
 ```
 
 ### Bronze Layer
 
 - Created database schemas and raw tables.
-- Loaded source datasets into SQL Server.
+- Loaded source CSV datasets directly into SQL Server using `BULK INSERT`.
 - Identified relationships between source tables.
 - Performed initial data validation.
 
@@ -77,9 +76,10 @@ The project follows the Medallion Architecture.
 - Loaded analytical data into the Gold layer.
 - Validated records, relationships and data quality.
 
-**Gold Layer: 10 tables**
+**Gold Layer: 10 Tables**
 
-- 4 Fact/Dimension groups? 
+- 6 Dimension Tables
+- 4 Fact Tables
 
 ## Power BI Dashboard
 
@@ -121,13 +121,15 @@ The dataset contains information about:
 
 Dataset attribution belongs to the original Olist dataset providers.
 
+**Note:** Source CSV files are not included in the GitHub repository. Download the dataset from Kaggle and place the CSV files in the local `dataset/` folder before running the SQL loading scripts.
+
 ## Repository Structure
 
 ```text
 OlistStore-SQL-Data-Warehouse/
 |
 |-- dataset/
-|   |-- olist_order_reviews_normalized.tsv
+|   |-- .gitkeep
 |
 |-- docs/
 |   |-- BRONZE_ER_DIAGRAM.md
@@ -142,7 +144,6 @@ OlistStore-SQL-Data-Warehouse/
 |   |-- bronze/
 |       |-- inspect_dataset.py
 |       |-- profile_dataset.py
-|       |-- powershell.ps1
 |
 |-- sql/
 |   |-- bronze/
@@ -158,16 +159,17 @@ OlistStore-SQL-Data-Warehouse/
 
 1. Install Microsoft SQL Server and SQL Server Management Studio (SSMS).
 2. Download the Olist dataset from Kaggle.
-3. Configure the dataset file paths in the Bronze loading SQL scripts.
-4. Execute the Bronze database and table creation scripts.
-5. Load the raw datasets into the Bronze layer.
-6. Execute the Silver table creation and transformation scripts.
-7. Execute the Gold table creation and loading scripts.
-8. Run the Gold validation and business analysis queries.
-9. Open `powerbi/Dashboard.pbix` in Power BI Desktop.
-10. Configure the SQL Server connection to your local data warehouse and refresh the report.
+3. Place the original CSV files in the local `dataset/` folder.
+4. Configure the dataset file paths in the Bronze loading SQL script.
+5. Execute the Bronze database and table creation scripts.
+6. Load the raw CSV datasets into the Bronze layer using `BULK INSERT`.
+7. Execute the Silver table creation and transformation scripts.
+8. Execute the Gold table creation and loading scripts.
+9. Run the Gold validation and business analysis queries.
+10. Open `powerbi/Dashboard.pbix` in Power BI Desktop.
+11. Configure the SQL Server connection to your local data warehouse and refresh the report.
 
-Refer to the `Flow.txt` and `docs/PROJECT_DOCUMENTATION.txt` files for additional implementation details.
+Refer to `Flow.txt` and `docs/PROJECT_DOCUMENTATION.txt` for additional implementation details.
 
 ## Project Status
 
